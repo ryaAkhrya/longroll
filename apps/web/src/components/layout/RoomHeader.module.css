@@ -31,3 +31,6 @@
   .desktop { display: flex; }
   .mobile { display: none; }
 }
+
+.logo { display: inline-flex; border-radius: var(--r-xs); }
+@media (pointer: coarse) { .logo { align-items: center; min-height: 44px; } }

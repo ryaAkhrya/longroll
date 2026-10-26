@@ -43,7 +43,7 @@ export function ParticipantSlot({ participant, slotNumber, inviteUrl }: Particip
           Slot ke-{slotNumber}
           <span className={styles.longOnly}> masih kosong</span>
         </p>
-        <Button variant="secondary" size="sm" icon={<Link2 size={14} {...iconProps} />} onClick={copy} className={styles.longOnly}>
+        <Button variant="secondary" size="sm" icon={<Link2 size={14} {...iconProps} />} onClick={copy} className={styles.longBtn}>
           Salin link undangan
         </Button>
       </li>

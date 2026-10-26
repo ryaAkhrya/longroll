@@ -19,7 +19,9 @@ export function Hero() {
                 <span key={c} style={{ background: c }} />
               ))}
             </span>
-            Sampai 4 orang · tanpa akun<span className={styles.hideMobile}> · tanpa host</span>
+            <span>
+              Sampai 4 orang · tanpa akun<span className={styles.hideMobile}> · tanpa host</span>
+            </span>
           </p>
           <h1 id="hero-title" className={`dc ${styles.title}`}>
             Photobooth bareng, <span className="s">dari mana aja.</span>

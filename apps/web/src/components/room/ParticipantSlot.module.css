@@ -23,8 +23,10 @@
 
 .shortOnly { display: inline; }
 .longOnly { display: none; }
+.longBtn { display: none; }
 @media (min-width: 600px) {
   .shortOnly { display: none; }
   .longOnly { display: inline; }
+  .longBtn { display: inline-flex; }
 }
 @media (min-width: 1024px) { .slot { border-radius: 18px; } }

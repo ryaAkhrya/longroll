@@ -24,7 +24,7 @@ export function RoomHeader({ code, participants, statusTag, actions }: RoomHeade
   return (
     <header className={styles.desktop}>
       <div className={styles.left}>
-        <Link href="/" aria-label="LONGROLL, ke beranda">
+        <Link href="/" aria-label="LONGROLL, ke beranda" className={styles.logo}>
           <Wordmark size={22} />
         </Link>
         <span className={styles.divider} aria-hidden="true" />

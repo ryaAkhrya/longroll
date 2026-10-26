@@ -4,7 +4,7 @@
 .title :global(.s) { font-size: 1.04em; color: var(--ink2); letter-spacing: 0; }
 .blurb { display: none; max-width: 330px; font-size: 13.5px; line-height: 1.55; color: var(--ink2); }
 
-.scroller { overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; padding-left: max(var(--page-pad), var(--safe-left)); }
+.scroller { overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding-left: var(--page-pad); padding-left: max(var(--page-pad), var(--safe-left)); }
 .scroller::-webkit-scrollbar { display: none; }
 .row { display: flex; align-items: flex-end; gap: 14px; width: max-content; padding: 6px var(--page-pad) 6px 0; }
 .item { flex: none; width: var(--w); scroll-snap-align: start; }

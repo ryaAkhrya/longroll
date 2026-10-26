@@ -1,3 +1,4 @@
 .header { padding-top: var(--safe-top); }
 .inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
 .logo { display: inline-flex; border-radius: var(--r-xs); }
+@media (pointer: coarse) { .logo { align-items: center; min-height: 44px; } }

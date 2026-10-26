@@ -1,6 +1,7 @@
 .header { padding-top: var(--safe-top); }
 .inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
 .logo { display: inline-flex; border-radius: var(--r-xs); }
+@media (pointer: coarse) { .logo { align-items: center; min-height: 44px; } }
 .nav { display: none; margin-left: auto; gap: 28px; font-size: 13.5px; font-weight: 500; color: var(--ink2); }
 .nav a { padding: 8px 0; border-radius: var(--r-xs); }
 .nav a:hover { color: var(--ink); }
