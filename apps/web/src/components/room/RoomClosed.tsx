@@ -4,8 +4,8 @@ import { LinkButton } from "@/components/ui/Button";
 import styles from "./RoomClosed.module.css";
 
 /** SCR-21 (DERIVED). "{N} menit" mengikuti DEC-020; tanpa kata "permanen" (15 §8 belum terverifikasi). */
-export function RoomClosed({ code }: { code: string }) {
-  const minutes = Math.round(DEFAULT_ROOM_GRACE_PERIOD_SECONDS / 60);
+export function RoomClosed({ code, graceSeconds = DEFAULT_ROOM_GRACE_PERIOD_SECONDS }: { code: string; graceSeconds?: number }) {
+  const minutes = Math.max(1, Math.round(graceSeconds / 60));
   return (
     <section className={styles.wrap} aria-labelledby="closed-title">
       <div className={styles.art} aria-hidden="true">

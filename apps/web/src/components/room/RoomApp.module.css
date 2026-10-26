@@ -1,0 +1,2 @@
+.page { padding-top: 8px; padding-bottom: calc(32px + var(--safe-bottom)); }
+.checking { display: flex; flex-direction: column; gap: 14px; padding: 24px 0; }

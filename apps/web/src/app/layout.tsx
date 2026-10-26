@@ -18,7 +18,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="id">
+    <html lang="id" data-scroll-behavior="smooth">
       <head>
         {/* Preload font halaman pertama (Bricolage + Figtree). Instrument Serif dimuat saat dipakai. */}
         <link rel="preload" href="/fonts/bricolage-grotesque-wdth.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />

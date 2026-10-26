@@ -1,0 +1,9 @@
+.banner {
+  position: sticky; top: calc(var(--header-h) + var(--safe-top)); z-index: 25;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px var(--page-pad);
+  background: var(--warn-bg); color: var(--retention-ink);
+  font-size: 13px; text-align: center;
+}
+.banner svg { flex: none; }
+.hint { font-weight: 400; }

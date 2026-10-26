@@ -1,0 +1,3 @@
+.wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.qr { width: min(280px, 100%); height: auto; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
+.note { font-size: 13px; text-align: center; color: var(--mute-text); }

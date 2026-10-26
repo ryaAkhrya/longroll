@@ -1,17 +1,14 @@
 import { isCompleteRoomCode, normalizeRoomCode } from "@longroll/shared";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Container } from "@/components/layout/Container";
 import { AppShell } from "@/components/layout/AppShell";
-import { MobileRoomHeader } from "@/components/layout/MobileRoomHeader";
-import { RoomHeader } from "@/components/layout/RoomHeader";
+import { Container } from "@/components/layout/Container";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { Banner } from "@/components/ui/Banner";
 import { buttonClass } from "@/components/ui/Button";
-import { CreateRoomForm } from "@/components/room/CreateRoomForm";
-import { JoinRoomForm } from "@/components/room/JoinRoomForm";
-import { LobbyLayout } from "@/components/room/LobbyLayout";
 import { PreviewBadge } from "@/components/room/PreviewBadge";
+import { PreviewLobby } from "@/components/room/PreviewLobby";
+import { RoomApp } from "@/components/room/RoomApp";
 import { RoomClosed } from "@/components/room/RoomClosed";
 import { parsePreview, SAMPLE_ROOM } from "@/lib/sample-room";
 
@@ -31,9 +28,8 @@ type Props = {
 };
 
 /**
- * Kerangka aplikasi room (13 §3). P01: hanya layout.
- * - `/r/new` → SCR-02, `/r/{KODE}` → SCR-03 (tombol belum aktif sampai P02).
- * - `?preview=lobby|expired|join|create` hanya aktif di dev dan memakai data contoh.
+ * Aplikasi room (13 §3). `/r/new` → SCR-02, `/r/{KODE}` → resume/SCR-03/SCR-05/SCR-21 (client-side).
+ * `?preview=lobby|expired` hanya di dev: tampilan statis dengan data contoh, tanpa realtime service.
  */
 export default async function RoomPage({ params, searchParams }: Props) {
   const { code: rawCode } = await params;
@@ -42,25 +38,7 @@ export default async function RoomPage({ params, searchParams }: Props) {
   const isNew = rawCode.toLowerCase() === "new";
   const code = normalizeRoomCode(safeDecode(rawCode));
 
-  if (preview === "lobby") {
-    const room = SAMPLE_ROOM;
-    return (
-      <AppShell
-        header={
-          <>
-            <RoomHeader code={room.code} participants={room.participants} statusTag="Lobby" />
-            <MobileRoomHeader code={room.code} participants={room.participants} />
-          </>
-        }
-      >
-        <Container>
-          <PreviewBadge />
-        </Container>
-        <LobbyLayout room={room} />
-      </AppShell>
-    );
-  }
-
+  if (preview === "lobby") return <PreviewLobby />;
   if (preview === "expired") {
     return (
       <AppShell header={<SiteHeader />}>
@@ -72,16 +50,7 @@ export default async function RoomPage({ params, searchParams }: Props) {
     );
   }
 
-  if (isNew || preview === "create") {
-    return (
-      <AppShell header={<SiteHeader />}>
-        <Container size="narrow">
-          {preview === "create" && <PreviewBadge derived />}
-          <CreateRoomForm />
-        </Container>
-      </AppShell>
-    );
-  }
+  if (isNew) return <RoomApp key="new" code="new" />;
 
   if (!isCompleteRoomCode(code)) {
     return (
@@ -103,12 +72,5 @@ export default async function RoomPage({ params, searchParams }: Props) {
     );
   }
 
-  return (
-    <AppShell header={<SiteHeader />}>
-      <Container size="narrow">
-        {preview === "join" && <PreviewBadge derived />}
-        <JoinRoomForm code={code} previewRoom={preview === "join" ? SAMPLE_ROOM : undefined} />
-      </Container>
-    </AppShell>
-  );
+  return <RoomApp key={code} code={code} />;
 }

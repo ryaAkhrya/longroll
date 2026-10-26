@@ -34,3 +34,7 @@
 
 .logo { display: inline-flex; border-radius: var(--r-xs); }
 @media (pointer: coarse) { .logo { align-items: center; min-height: 44px; } }
+
+.menu { display: flex; flex-direction: column; gap: 8px; }
+.menu > * { justify-content: flex-start; }
+.sep { width: 100%; height: 1px; margin: 4px 0; border: 0; background: var(--line); }

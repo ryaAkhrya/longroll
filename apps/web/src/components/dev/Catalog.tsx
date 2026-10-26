@@ -28,12 +28,14 @@ import styles from "./Catalog.module.css";
 
 const NAMES = ["Nadia", "Raka", "Sasa", "Bimo"];
 const PEOPLE: ParticipantView[] = PLAYER_COLORS.map((color, i) => ({
-  id: color,
+  participantId: color,
   displayName: NAMES[i] ?? color,
   color,
-  isSelf: i === 0,
-  status: "online",
-  statusText: "",
+  joinedAtMs: 0,
+  connection: "CONNECTED",
+  disconnectedAtMs: null,
+  camera: "none",
+  ready: false,
 }));
 
 export function Catalog() {
@@ -149,7 +151,13 @@ function ThemeSection({ theme }: { theme: "light" | "stage" }) {
       <Group title="Avatar & stack">
         <div className={styles.row}>
           {SAMPLE_ROOM.participants.map((p) => (
-            <Avatar key={p.id} name={p.displayName} color={p.color} size={40} status={p.status} />
+            <Avatar
+              key={p.participantId}
+              name={p.displayName}
+              color={p.color}
+              size={40}
+              status={p.connection === "RECONNECTING" ? "pending" : "online"}
+            />
           ))}
           <AvatarStack participants={PEOPLE} />
         </div>

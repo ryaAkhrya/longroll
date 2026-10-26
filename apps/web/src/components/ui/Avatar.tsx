@@ -14,7 +14,7 @@ interface AvatarProps {
   className?: string;
 }
 
-const STATUS_LABEL: Record<PresenceStatus, string> = { online: "online", pending: "belum siap", away: "tidak aktif" };
+const STATUS_LABEL: Record<PresenceStatus, string> = { online: "online", pending: "sedang nyambung lagi", away: "tidak aktif" };
 
 /** Avatar inisial di warna pemain (tint/deep). Bukan kartun; foto kamera mini menyusul di P03. */
 export function Avatar({ name, color, size = 30, status, ring, className }: AvatarProps) {

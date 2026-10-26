@@ -14,6 +14,6 @@
     "lint": "npm run lint -w @longroll/web"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   }
 }

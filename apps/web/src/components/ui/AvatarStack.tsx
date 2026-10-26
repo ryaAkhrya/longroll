@@ -4,7 +4,7 @@ import { Avatar } from "./Avatar";
 import styles from "./AvatarStack.module.css";
 
 interface AvatarStackProps {
-  participants: Pick<ParticipantView, "id" | "displayName" | "color">[];
+  participants: Pick<ParticipantView, "participantId" | "displayName" | "color">[];
   size?: number;
   className?: string;
 }
@@ -15,10 +15,10 @@ export function AvatarStack({ participants, size = 30, className }: AvatarStackP
     <span
       className={cx(styles.stack, className)}
       role="group"
-      aria-label={`${participants.length} peserta di room`}
+      aria-label={`${participants.length} peserta di room: ${participants.map((p) => p.displayName).join(", ")}`}
     >
       {participants.map((p) => (
-        <Avatar key={p.id} name={p.displayName} color={p.color} size={size} ring />
+        <Avatar key={p.participantId} name={p.displayName} color={p.color} size={size} ring />
       ))}
     </span>
   );

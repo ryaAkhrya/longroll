@@ -2,7 +2,8 @@
 .main { display: flex; flex-direction: column; }
 .title { font-size: 34px; line-height: 0.95; }
 .sub { margin-top: 6px; font-size: 14px; color: var(--ink2); }
-.grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; height: min(420px, 56dvh); margin-top: 16px; }
+.gridWrap { position: relative; margin-top: 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; height: min(420px, 56dvh); }
 .deskOnly { display: none; }
 
 .side { display: contents; }
@@ -17,7 +18,9 @@
   .title { font-size: 40px; }
   .sub { font-size: 14.5px; }
   .deskOnly { display: inline; }
-  .grid { height: auto; flex: 1; min-height: 420px; gap: 10px; margin-top: 18px; }
+  .main { min-height: 0; }
+  .gridWrap { flex: 1; display: flex; min-height: 420px; margin-top: 18px; }
+  .grid { flex: 1; height: auto; gap: 10px; }
   .side { display: flex; flex-direction: column; gap: 12px; }
   .roster { display: block; padding: 18px 20px; }
   .people { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }

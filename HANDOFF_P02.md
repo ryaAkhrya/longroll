@@ -1,0 +1,63 @@
+### Handoff P02 → P03
+
+> **Pembaruan:** persistensi Redis diganti PostgreSQL (Neon). Detail, deviasi arsitektur, dan langkah SQL manual: [HANDOFF_P02_NEON.md](HANDOFF_P02_NEON.md). Bagian di bawah yang menyebut Redis sudah tidak berlaku.
+
+- **Status fase:** IMPLEMENTED — belum diverifikasi (typecheck, lint, build, tes belum dijalankan).
+- **Pekerjaan selesai:**
+  - Create, preview, join, session, dan leave lewat HTTP.
+  - WebSocket dengan autentikasi cookie + `Origin` saat upgrade.
+  - RoomActor serial dengan aturan "commit ke store sebelum ack".
+  - Kapasitas 4 atomik, warna P1..P4, validasi nama, dan sufiks nama duplikat.
+  - Presence `CONNECTED/RECONNECTING/LEFT`, heartbeat, hold slot, grace, dan expiry.
+  - Tombstone, cleanup dengan verifikasi + retry.
+  - Resume `lastSeq` dengan fallback snapshot, idempotensi `clientEventId`, dan takeover multi-tab.
+  - Kursor desktop dan rate limit.
+  - UI SCR-02/03/05/20(b)/21 dan input kode di landing.
+- **File utama:**
+  - Realtime: `apps/realtime/src/{room,http,ws,store,storage}/`
+  - Klien: `apps/web/src/room/`, `apps/web/src/components/room/`
+  - Kontrak protokol: `packages/shared/src/protocol.ts`
+- **Keputusan teknis:**
+  - DEC-020: 120 s (`ROOM_GRACE_PERIOD_SECONDS`).
+  - DEC-021: hold 60 s.
+  - DEC-052: tetap nonaktif (`expiresAtMs = null`).
+  - DEC-082: cookie host-only milik realtime, `HttpOnly; SameSite=Strict; Secure`. Fallback `auth`/`sessionStorage` **tidak** diaktifkan.
+  - DEC-088: satu instance.
+  - DEC-078: tanpa Tailwind.
+  - Semua masih PROPOSED/RECOMMENDED.
+- **Hold slot vs grace (perilaku hasil):**
+  - Peserta putus → `RECONNECTING`; slot & warna dijaga selama hold.
+  - Hold habis → `LEFT` dan token dicabut. Kredensial lama tidak pernah dipulihkan diam-diam.
+  - Room kosong → `GRACE` (timer terpisah dari hold). Selama GRACE: resume (bila hold belum habis) atau join baru tetap boleh, dan join langsung mengaktifkan room lagi.
+  - Reconnect setelah hold habis tapi sebelum grace berakhir → `401` → SCR-03 dengan pesan "Slot kamu udah dilepas…" → join ulang sebagai peserta baru. Peserta baru ini dapat warna kosong terkecil dan tidak pernah menimpa slot orang lain.
+  - Grace habis → `EXPIRING` → cleanup → tombstone 24 jam → SCR-21.
+- **Kredensial:**
+  - Token 32 byte CSPRNG; server hanya menyimpan hash SHA-256 dan membandingkannya constant-time.
+  - Rotasi di setiap `POST /session`, yaitu sebelum tiap koneksi WS dan penyegaran berkala di TTL/2. Token lama tetap diterima 60 s untuk mengatasi race multi-tab.
+  - Umur kredensial `CREDENTIAL_TTL_SECONDS` (default 12 jam): terbatas tapi bisa diperbarui, tidak terikat ke tanggal kedaluwarsa room yang fiktif.
+- **Endpoint tambahan di luar 14 §4 (PROPOSED):**
+  - `POST /api/rooms/{code}/session`: resume + rotasi, karena cookie HttpOnly tidak bisa dibaca JS.
+  - `POST /api/rooms/{code}/leave`: hanya server yang bisa menghapus cookie HttpOnly.
+  - `PreviewResponse` menambah `capacity`, `colors`, `holding`, tanpa data pribadi.
+- **Tes yang dijalankan:** tidak ada.
+- **Tes yang BELUM dijalankan:**
+  - Unit: `npm test`.
+  - Integrasi: `npm run test:integration -w @longroll/realtime`. Bagian PostgreSQL butuh `LONGROLL_TEST_DATABASE_URL` (manual).
+  - E2E 4 konteks: `npm run test:e2e -w @longroll/web`.
+  - Perangkat nyata iOS/Android.
+  - TC-PERF kursor.
+- **Masalah yang diketahui:**
+  - Tanpa `DATABASE_URL`, state hanya di memori proses: **tidak tahan restart, bukan untuk produksi**. Server menolak start di produksi tanpa database.
+  - Adapter object storage baru tersedia untuk folder lokal dan memori. Adapter S3/R2/minio menyusul saat upload pertama (P05/P06).
+  - Sweeper harian objek yatim dan alarm baru dikerjakan di P09.
+- **Risiko terbuka:**
+  - CSP masih `script-src 'unsafe-inline'`, jadi belum diperkeras. Ini juga melemahkan mitigasi XSS untuk DEC-082.
+  - Cookie butuh web & realtime satu site.
+  - Safari + http://localhost + `Secure` belum diuji.
+  - Satu instance realtime = titik gagal tunggal (RK-11).
+  - Rate limit memakai fixed-window tanpa backoff eksponensial.
+- **Catatan sementara:**
+  - SCR-04 (cek kamera) dilewati sampai P03.
+  - Kursor hanya tampil di lobby saat dev (DEC-071 tidak menampilkan kursor di lobby produksi).
+  - "Mulai vote mode · Segera" hanya muncul di dev.
+- **Kesiapan untuk P03:** belum, sampai verifikasi P02 lulus. DEC-073 (TURN) harus dipilih di awal P03; DEC-076 tetap OPEN dan tidak memblokir.

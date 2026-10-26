@@ -1,0 +1,6 @@
+.loading { display: flex; flex-direction: column; gap: 16px; padding: 20px 0; }
+.loadingGrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; height: min(420px, 56dvh); }
+.replaced { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; margin-top: 32px; }
+.replaced h1 { font-size: 36px; line-height: 0.95; }
+.replaced h1 :global(.s) { color: var(--plum); font-size: 1.04em; letter-spacing: 0; }
+.replaced p { color: var(--ink2); }
