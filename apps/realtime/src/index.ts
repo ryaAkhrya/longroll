@@ -3,6 +3,8 @@ import { loadConfig } from "./config";
 import { log } from "./log";
 import { FsObjectStorage } from "./storage/fs";
 import { MemoryObjectStorage } from "./storage/memory";
+import { S3ObjectStorage } from "./storage/s3";
+import { LocalUrlSigner } from "./storage/signer";
 import type { ObjectStorage } from "./storage/types";
 import { createPgDb } from "./store/db";
 import { MemoryRoomStore } from "./store/memory";
@@ -22,9 +24,23 @@ function pickStore(): RoomStore {
 }
 
 function pickStorage(): ObjectStorage {
-  if (config.storageLocalDir) return new FsObjectStorage(config.storageLocalDir);
-  log.warn("storage.memory", { hint: "STORAGE_LOCAL_DIR kosong: object storage di memori (P02 belum mengunggah apa pun)." });
-  return new MemoryObjectStorage();
+  if (config.s3) {
+    const s3 = config.s3;
+    if (!s3.bucket || !s3.accessKeyId || !s3.secretAccessKey) {
+      log.error("config.s3_incomplete", { hint: "S3_ENDPOINT diset tapi S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY kosong." });
+      process.exit(1);
+    }
+    return new S3ObjectStorage(s3);
+  }
+  if (config.isProduction && !config.allowMemoryStore) {
+    // Storage lokal tidak tahan multi-instance & disk ephemeral: produksi wajib S3-compatible.
+    log.error("config.storage_required", { hint: "Set S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY." });
+    process.exit(1);
+  }
+  const signer = new LocalUrlSigner(config.publicHttpUrl, config.storageSigningSecret);
+  if (config.storageLocalDir) return new FsObjectStorage(config.storageLocalDir, signer);
+  log.warn("storage.memory", { hint: "STORAGE_LOCAL_DIR & S3_ENDPOINT kosong: frame custom disimpan di memori proses (dev saja)." });
+  return new MemoryObjectStorage(signer);
 }
 
 const store = pickStore();

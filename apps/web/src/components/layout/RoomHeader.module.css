@@ -38,3 +38,6 @@
 .menu { display: flex; flex-direction: column; gap: 8px; }
 .menu > * { justify-content: flex-start; }
 .sep { width: 100%; height: 1px; margin: 4px 0; border: 0; background: var(--line); }
+
+.center { position: absolute; left: 50%; top: calc(var(--safe-top) + 30px); transform: translate(-50%, -50%); }
+.desktop { position: sticky; }

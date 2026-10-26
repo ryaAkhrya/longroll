@@ -84,6 +84,26 @@ export function applyEvent(room: RoomView, event: Pick<S2C, "type" | "payload" |
     case "room.expiring":
       if (e.payload.reason === "GRACE") next.status = "EXPIRING";
       break;
+    case "session.state": {
+      const s = e.payload.session;
+      const cur = next.activeSession;
+      // Sesi lama yang ditutup tidak menggantikan sesi aktif yang lebih baru.
+      if (!cur || s.sessionId === cur.sessionId || s.index > cur.index) next.activeSession = s;
+      next.sessionCount = e.payload.sessionCount;
+      break;
+    }
+    case "studio.updated": {
+      const cur = next.activeSession;
+      const { sessionId, studio } = e.payload;
+      // Versi studio monoton: event lama (replay) tidak menimpa state yang lebih baru.
+      if (cur && cur.sessionId === sessionId && (!cur.studio || studio.version >= cur.studio.version)) next.activeSession = { ...cur, studio };
+      break;
+    }
+    case "frame.added": {
+      const list = next.customFrames ?? [];
+      if (!list.some((f) => f.frameId === e.payload.frame.frameId)) next.customFrames = [...list, e.payload.frame];
+      break;
+    }
   }
   if (event.seq !== undefined) next.lastSeq = event.seq;
   if (event.roomVersion !== undefined) next.roomVersion = event.roomVersion;
@@ -100,6 +120,7 @@ export class RoomClient {
   private state: RoomClientState = { status: "connecting", room: null, me: null, lastSeq: 0, attempt: 0, clockOffsetMs: 0 };
   private listeners = new Set<() => void>();
   private eventListeners = new Set<(e: RoomClientEvent) => void>();
+  private signalListeners = new Set<(type: string, payload: unknown) => void>();
   private ws: WebSocket | null = null;
   private stopped = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -125,6 +146,25 @@ export class RoomClient {
     };
   };
   getSnapshot = () => this.state;
+
+  /** Pesan volatile non-state: sinyal WebRTC (`rtc.*`) dan `presence.activity`. */
+  onSignal(fn: (type: string, payload: unknown) => void) {
+    this.signalListeners.add(fn);
+    return () => {
+      this.signalListeners.delete(fn);
+    };
+  }
+
+  /** Kirim pesan volatile tanpa ack (sinyal WebRTC, aktivitas). Hilang bila socket sedang putus. */
+  sendVolatile(type: string, payload: unknown): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify({ type, payload }));
+    return true;
+  }
+
+  get connected() {
+    return this.ws?.readyState === WebSocket.OPEN && this.state.status === "open";
+  }
 
   onEvent(fn: (e: RoomClientEvent) => void) {
     this.eventListeners.add(fn);
@@ -309,6 +349,13 @@ export class RoomClient {
         if (typeof t1 === "number") this.set({ clockOffsetMs: Math.round(ts - (t1 + Date.now()) / 2) });
         return;
       }
+      case "rtc.offer":
+      case "rtc.answer":
+      case "rtc.ice":
+      case "rtc.restart":
+      case "presence.activity":
+        for (const fn of this.signalListeners) fn(msg.type, msg.payload);
+        return;
       case "cursor.move": {
         const c = msg.payload as CursorPayload & { participantId: string };
         this.cursors.upsert({ ...c, atMs: Date.now() });

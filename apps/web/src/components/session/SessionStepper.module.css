@@ -1,0 +1,9 @@
+.stepper { display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 3px; border-radius: 10px; background: var(--sunk); }
+:global([data-theme="stage"]) .stepper { background: var(--stage2); }
+.step {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 12px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink2); opacity: 0.45;
+}
+.done { opacity: 1; }
+.active { opacity: 1; background: var(--surface); color: var(--ink); box-shadow: var(--sh1); }
+:global([data-theme="stage"]) .active { background: #fff; color: var(--stage); }

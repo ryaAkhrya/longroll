@@ -1,0 +1,61 @@
+.railItem {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 13px; border: 0;
+  background: transparent; color: rgba(255, 255, 255, 0.72); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.railItem:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.railOn, .railOn:hover { background: #fff; color: var(--stage); }
+
+.result { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.resultHead { display: flex; align-items: center; justify-content: space-between; color: rgba(255, 255, 255, 0.6); }
+.resultCanvas { position: relative; flex: 1; min-height: 220px; border-radius: 18px; background: var(--stage2); }
+.resultCanvas > .inset { inset: 14px; }
+
+.previewArea {
+  flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px;
+  border-radius: 22px; background: radial-gradient(120% 90% at 50% 40%, #2a2430 0%, var(--stage) 75%);
+}
+.previewLabel { display: flex; align-items: center; gap: 8px; margin: 0; color: rgba(255, 255, 255, 0.6); }
+.previewCanvas { position: relative; flex: 1; min-height: 0; }
+.previewInfo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.previewInfo p { margin: 0; }
+.muted { color: rgba(255, 255, 255, 0.55); font-size: 12.5px; }
+
+.drawerInner { position: relative; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.drawerInner header { padding-right: 34px; }
+.drawerClose { position: absolute; right: -6px; top: -4px; color: #fff; font-size: 20px; z-index: 2; }
+.drawerTitle { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+.cameraPanel { display: flex; flex-direction: column; gap: 12px; color: var(--ink); }
+.cameraPanel .drawerTitle { color: #fff; }
+
+.timer { display: inline-flex; }
+.timerDesk { display: none; gap: 3px; padding: 3px; border-radius: 11px; background: var(--stage2); }
+.timerItem { height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: transparent; color: rgba(255, 255, 255, 0.6); font: inherit; font-size: 13px; }
+.timerItem:disabled { cursor: not-allowed; }
+.timerOn { background: rgba(255, 255, 255, 0.85); color: var(--stage); }
+.dockBtn {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: transparent; color: #fff;
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.dockBtn > svg { box-sizing: content-box; padding: 13px; border-radius: 14px; background: var(--stage2); }
+.dockBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 12px;
+  background: rgba(27, 23, 32, 0.55); backdrop-filter: blur(10px); color: #fff; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+}
+.progress { display: inline-flex; gap: 3px; }
+.progress span { width: 12px; height: 16px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.7); }
+
+.sheetPanel { display: flex; flex-direction: column; gap: 8px; }
+.sheetBack { align-self: flex-start; color: #fff; background: rgba(255, 255, 255, 0.08); }
+.toolList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.toolItem {
+  width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 14px; border-radius: 14px; border: 0;
+  background: var(--stage3, #2a2530); color: #fff; font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.toolItem > span:nth-child(2) { flex: 1; }
+
+@media (min-width: 1024px) {
+  .timerDesk { display: inline-flex; }
+  .timer > .dockBtn { display: none; }
+}

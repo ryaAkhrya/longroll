@@ -7,12 +7,21 @@ export interface ServerConfig {
   allowedOrigins: string[];
   /** URL WebSocket publik yang dikirim ke klien (tanpa query). */
   publicWsUrl: string;
+  /** Origin HTTP publik service realtime (URL bertanda tangan storage lokal). */
+  publicHttpUrl: string;
   /** Connection string PostgreSQL (Neon, `sslmode=verify-full`). Rahasia: jangan dicatat/di-commit. */
   databaseUrl: string | null;
   database: { poolMax: number; statementTimeoutMs: number };
   /** Izinkan store memori di produksi (TIDAK disarankan; tidak tahan restart). */
   allowMemoryStore: boolean;
   storageLocalDir: string | null;
+  /** Rahasia HMAC URL storage lokal. Kosong = acak per proses. */
+  storageSigningSecret: string | null;
+  /**
+   * Object storage S3-compatible (Neon Object Storage / R2 / MinIO). Semua field wajib bila dipakai.
+   * Rahasia: jangan dicatat / di-commit.
+   */
+  s3: { endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean } | null;
   cookie: { secure: boolean; domain: string | null };
   room: {
     graceSeconds: number;
@@ -24,6 +33,12 @@ export interface ServerConfig {
     heartbeatMissedLimit: number;
   };
   credential: { ttlSeconds: number; rotationGraceMs: number };
+  /**
+   * ICE (DEC-073 OPEN, provider-neutral). STUN saja bila TURN tidak dikonfigurasi.
+   * TURN memakai skema REST "use-auth-secret" (coturn & banyak penyedia terkelola):
+   * username = `expiry:participantId`, credential = base64(HMAC-SHA1(secret, username)).
+   */
+  ice: { stunUrls: string[]; turnUrls: string[]; turnSharedSecret: string | null; turnTtlSeconds: number };
   rateLimitSalt: string;
   trustProxy: boolean;
   cleanupRetrySeconds: number[];
@@ -37,6 +52,15 @@ function num(value: string | undefined, fallback: number): number {
   return n;
 }
 
+/** Kosong = default; "none" = daftar kosong (mis. menonaktifkan STUN). */
+function list(value: string | undefined, fallback: string): string[] {
+  if (value?.trim().toLowerCase() === "none") return [];
+  return (value === undefined || value.trim() === "" ? fallback : value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value.trim() === "") return fallback;
   return value === "1" || value.toLowerCase() === "true";
@@ -46,6 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const port = num(env.PORT, 4000);
   const isProduction = env.NODE_ENV === "production";
   const maxLifetimeRaw = env.ROOM_MAX_LIFETIME_HOURS?.trim();
+  const publicWsUrl = env.PUBLIC_WS_URL?.trim() || `ws://localhost:${port}/ws`;
+  const s3Endpoint = env.S3_ENDPOINT?.trim();
   return {
     port,
     isProduction,
@@ -53,7 +79,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       .split(",")
       .map((o) => o.trim())
       .filter(Boolean),
-    publicWsUrl: env.PUBLIC_WS_URL?.trim() || `ws://localhost:${port}/ws`,
+    publicWsUrl,
+    publicHttpUrl: env.PUBLIC_HTTP_URL?.trim() || publicWsUrl.replace(/^ws/, "http").replace(/\/ws$/, ""),
     databaseUrl: env.DATABASE_URL?.trim() || null,
     database: {
       poolMax: num(env.DATABASE_POOL_MAX, 5),
@@ -61,6 +88,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     },
     allowMemoryStore: bool(env.ALLOW_MEMORY_STORE, false),
     storageLocalDir: env.STORAGE_LOCAL_DIR?.trim() || null,
+    storageSigningSecret: env.STORAGE_SIGNING_SECRET?.trim() || null,
+    s3: s3Endpoint
+      ? {
+          endpoint: s3Endpoint,
+          region: env.S3_REGION?.trim() || "auto",
+          bucket: env.S3_BUCKET?.trim() || "",
+          accessKeyId: env.S3_ACCESS_KEY_ID?.trim() || "",
+          secretAccessKey: env.S3_SECRET_ACCESS_KEY?.trim() || "",
+          forcePathStyle: bool(env.S3_FORCE_PATH_STYLE, true),
+        }
+      : null,
     cookie: {
       // Default Secure. Chrome/Firefox menerima cookie Secure di http://localhost.
       secure: bool(env.COOKIE_SECURE, true),
@@ -77,6 +115,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     credential: {
       ttlSeconds: num(env.CREDENTIAL_TTL_SECONDS, ROOM_DEFAULTS.credentialTtlSeconds),
       rotationGraceMs: ROOM_DEFAULTS.credentialRotationGraceMs,
+    },
+    ice: {
+      stunUrls: list(env.STUN_URLS, "stun:stun.l.google.com:19302"),
+      turnUrls: list(env.TURN_URLS, ""),
+      turnSharedSecret: env.TURN_SHARED_SECRET?.trim() || null,
+      turnTtlSeconds: num(env.TURN_TTL_SECONDS, 3600),
     },
     // Salt acak per proses bila tidak diset: hash IP berganti saat restart (rotasi alami).
     rateLimitSalt: env.RATE_LIMIT_SALT?.trim() || randomBytes(32).toString("base64url"),

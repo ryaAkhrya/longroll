@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { ServerConfig } from "./config";
+import { FrameService } from "./frames/service";
 import { createApiHandler } from "./http/api";
 import { log } from "./log";
 import { RoomManager } from "./room/RoomManager";
@@ -25,7 +26,9 @@ export function createRealtimeApp(config: ServerConfig, store: RoomStore, storag
     credentialRotationGraceMs: config.credential.rotationGraceMs,
     cleanupRetrySeconds: config.cleanupRetrySeconds,
   });
-  const api = createApiHandler({ config, manager, store });
+  const frames = new FrameService(storage, store);
+  manager.onSweep((actor) => frames.sweep(actor));
+  const api = createApiHandler({ config, manager, store, storage, frames });
   const gateway = createGateway(config, manager);
 
   const server = createServer((req, res) => {

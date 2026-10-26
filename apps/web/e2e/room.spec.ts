@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Browser, BrowserContext, Page } from "@playwright/test";
+import { createRoom, joinRoom, newPage, passCameraCheck } from "./helpers";
 
 /**
  * IC-1 (P02 §16) dengan 4 konteks browser terpisah (cookie terpisah = 4 peserta):
@@ -7,38 +7,16 @@ import type { Browser, BrowserContext, Page } from "@playwright/test";
  * Server realtime memakai grace 6 s & hold 4 s (lihat playwright.config.ts).
  */
 
-async function createRoom(page: Page, name: string): Promise<string> {
-  await page.goto("/r/new");
-  await page.getByLabel("Nama panggilan").fill(name);
-  await page.getByRole("button", { name: "Bikin room" }).click();
-  await page.waitForURL(/\/r\/[A-HJ-NP-Z2-9]{6}$/);
-  await expect(page.getByRole("heading", { name: /geng/i })).toBeVisible();
-  return page.url().split("/r/")[1]!;
-}
-
-async function joinRoom(page: Page, code: string, name: string) {
-  await page.goto(`/r/${code}`);
-  await expect(page.getByText("Room ketemu")).toBeVisible();
-  await page.getByLabel("Nama panggilan").fill(name);
-  await page.getByRole("button", { name: `Gabung ke ${code}` }).click();
-  await expect(page.getByRole("heading", { name: /geng/i })).toBeVisible();
-}
-
-async function newPage(browser: Browser): Promise<{ ctx: BrowserContext; page: Page }> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  return { ctx, page: await ctx.newPage() };
-}
-
 test("4 peserta: join, presence, kursor, reload, takeover, keluar, penuh, bubar", async ({ browser }) => {
   const a = await newPage(browser);
   const b = await newPage(browser);
   const c = await newPage(browser);
   const d = await newPage(browser);
 
-  const code = await createRoom(a.page, "Nadia");
-  await joinRoom(b.page, code, "Raka");
-  await joinRoom(c.page, code, "Sasa");
-  await joinRoom(d.page, code, "Bimo");
+  const code = await createRoom(a.page, "Nadia", false);
+  await joinRoom(b.page, code, "Raka", false);
+  await joinRoom(c.page, code, "Sasa", false);
+  await joinRoom(d.page, code, "Bimo", false);
 
   // Presence ≤ 2 s di semua klien.
   for (const p of [a, b, c, d]) await expect(p.page.getByText("4 dari 4 udah masuk")).toBeVisible({ timeout: 2_000 });
@@ -64,6 +42,7 @@ test("4 peserta: join, presence, kursor, reload, takeover, keluar, penuh, bubar"
   // Multi-tab takeover.
   const b2 = await b.ctx.newPage();
   await b2.goto(`/r/${code}`);
+  await passCameraCheck(b2, false);
   await expect(b2.getByText("4 dari 4 udah masuk")).toBeVisible();
   await expect(b.page.getByText("LONGROLL dibuka")).toBeVisible();
   await b.page.getByRole("button", { name: "Pakai di sini" }).click();

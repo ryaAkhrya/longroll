@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
-import { isCompleteRoomCode, normalizeRoomCode, PROTOCOL_VERSION, RATE_LIMITS, WS_CLOSE, WS_MAX_MESSAGE_BYTES } from "@longroll/shared";
-import type { C2S, CursorPayload, CursorSurface, S2C } from "@longroll/shared";
+import { isCompleteRoomCode, normalizeRoomCode, PROTOCOL_VERSION, RATE_LIMITS, RTC_SIGNAL_TYPES, WS_CLOSE, WS_MAX_MESSAGE_BYTES } from "@longroll/shared";
+import type { C2S, CursorPayload, CursorSurface, RtcSignal, RtcSignalType, S2C } from "@longroll/shared";
 import type { ServerConfig } from "../config";
 import { clientIp, isAllowedOrigin, tokenFromCookie } from "../http/util";
 import { log } from "../log";
@@ -12,7 +12,10 @@ import type { RoomManager } from "../room/RoomManager";
 import type { RoomConnection } from "../room/types";
 
 const SURFACES: readonly CursorSurface[] = ["vote", "studio", "editor", "lobby"];
-const VOLATILE = new Set(["cursor.move", "time.ping"]);
+const VOLATILE = new Set(["cursor.move", "time.ping", "presence.activity", ...RTC_SIGNAL_TYPES]);
+/** Bucket terpisah untuk sinyal WebRTC: burst kandidat ICE tidak boleh memakan jatah intent. */
+const RTC_PER_SECOND = 100;
+const RTC_BURST = 200;
 const MAX_CLIENT_EVENT_ID = 64;
 
 class WsConnection implements RoomConnection {
@@ -20,6 +23,8 @@ class WsConnection implements RoomConnection {
   lastSeenMs = Date.now();
   private tokens: number = RATE_LIMITS.wsEventsPerSecond;
   private refillAt = Date.now();
+  private rtcTokens = RTC_BURST;
+  private rtcRefillAt = Date.now();
   violations = 0;
 
   constructor(readonly ws: WebSocket) {}
@@ -44,6 +49,46 @@ class WsConnection implements RoomConnection {
     this.tokens -= 1;
     return true;
   }
+
+  takeRtc(): boolean {
+    const now = Date.now();
+    this.rtcTokens = Math.min(RTC_BURST, this.rtcTokens + ((now - this.rtcRefillAt) / 1000) * RTC_PER_SECOND);
+    this.rtcRefillAt = now;
+    if (this.rtcTokens < 1) return false;
+    this.rtcTokens -= 1;
+    return true;
+  }
+}
+
+const MAX_ID = 64;
+const MAX_SDP = 60_000;
+
+/** Validasi bentuk sinyal; isi SDP/kandidat tidak diperiksa lebih jauh dan tidak pernah dicatat. */
+function parseRtc(type: RtcSignalType, payload: unknown): RtcSignal | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.to !== "string" || p.to.length > MAX_ID || typeof p.pc !== "string" || p.pc.length > MAX_ID) return null;
+  const out: RtcSignal = { to: p.to, pc: p.pc };
+  if (typeof p.rpc === "string" && p.rpc.length <= MAX_ID) out.rpc = p.rpc;
+  if (type === "rtc.offer" || type === "rtc.answer") {
+    const sdp = p.sdp as Record<string, unknown> | undefined;
+    const want = type === "rtc.offer" ? "offer" : "answer";
+    if (!sdp || sdp.type !== want || typeof sdp.sdp !== "string" || sdp.sdp.length > MAX_SDP) return null;
+    out.sdp = { type: want, sdp: sdp.sdp };
+  } else if (type === "rtc.ice") {
+    if (p.candidate === null) out.candidate = null;
+    else {
+      const c = p.candidate as Record<string, unknown> | undefined;
+      if (!c || typeof c.candidate !== "string" || c.candidate.length > 2048) return null;
+      out.candidate = {
+        candidate: c.candidate,
+        sdpMid: typeof c.sdpMid === "string" ? c.sdpMid.slice(0, 32) : null,
+        sdpMLineIndex: Number.isInteger(c.sdpMLineIndex) ? (c.sdpMLineIndex as number) : null,
+        usernameFragment: typeof c.usernameFragment === "string" ? c.usernameFragment.slice(0, 256) : null,
+      };
+    }
+  }
+  return out;
 }
 
 function reject(socket: Duplex, status: number, text: string) {
@@ -98,6 +143,13 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
     const clientEventId =
       typeof msg.clientEventId === "string" && msg.clientEventId.length <= MAX_CLIENT_EVENT_ID ? msg.clientEventId : undefined;
 
+    if ((RTC_SIGNAL_TYPES as readonly string[]).includes(msg.type)) {
+      if (!conn.takeRtc()) return;
+      const signal = parseRtc(msg.type as RtcSignalType, msg.payload);
+      if (signal) actor.relayRtc(participantId, msg.type as RtcSignalType, signal);
+      return;
+    }
+
     if (!conn.take()) {
       conn.violations++;
       if (conn.violations > 120) return conn.close(WS_CLOSE.RATE_LIMITED, "rate limited");
@@ -121,6 +173,11 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
       case "cursor.move": {
         const cursor = parseCursor(msg.payload);
         if (cursor) actor.relayCursor(participantId, cursor);
+        return;
+      }
+      case "presence.activity": {
+        const a = (msg.payload as { activity?: unknown } | undefined)?.activity;
+        actor.relayActivity(participantId, typeof a === "string" ? a.slice(0, 80) : null);
         return;
       }
       default:

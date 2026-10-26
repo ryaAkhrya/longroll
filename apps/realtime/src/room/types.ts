@@ -1,4 +1,4 @@
-import type { AckPayload, CameraState, ConnectionState, ErrorCode, PlayerColor, RoomStatus, S2C } from "@longroll/shared";
+import type { AckPayload, CameraPresentation, CameraState, ConnectionState, ErrorCode, FrameContentType, FrameTemplate, PlayerColor, RoomStatus, S2C, SessionView } from "@longroll/shared";
 
 /** Participant di server (14 §3). Field token SERVER ONLY, tidak pernah masuk view. */
 export interface ServerParticipant {
@@ -10,6 +10,8 @@ export interface ServerParticipant {
   disconnectedAtMs: number | null;
   camera: CameraState;
   ready: boolean;
+  mirrored: boolean;
+  cameraPresentation: CameraPresentation;
   tokenHash: string | null;
   tokenIssuedAtMs: number | null;
   /** Token sebelum rotasi terakhir, masih diterima sampai prevTokenValidUntilMs. */
@@ -28,16 +30,39 @@ export interface RoomState {
   participants: Record<string, ServerParticipant>;
   activeSessionId: string | null;
   sessionOrder: string[];
+  /** Semua sesi room (14 §6); disimpan di tabel lr_sessions. */
+  sessions: Record<string, SessionView>;
   roomVersion: number;
   lastSeq: number;
   /** SERVER ONLY: bertambah tiap simpan; optimistic concurrency di store (bukan roomVersion klien). */
   revision: number;
+  /** Frame custom room (P05, DEC-054) — juga indeks aset untuk cleanup (14 §11). Tabel lr_frames. */
+  frames: Record<string, ServerFrame>;
+}
+
+/** Frame custom: PENDING (presign diterbitkan, belum divalidasi) → READY (re-encode & lolos validasi). */
+export interface ServerFrame {
+  frameId: string;
+  uploadedBy: string;
+  status: "PENDING" | "READY";
+  fileName: string;
+  contentType: FrameContentType;
+  declaredBytes: number;
+  rawKey: string;
+  objectKey: string | null;
+  bytes: number | null;
+  template: FrameTemplate | null;
+  createdAtMs: number;
+  /** Batas upload PENDING; null setelah READY. */
+  expiresAtMs: number | null;
 }
 
 export class RoomError extends Error {
   constructor(
     readonly code: ErrorCode,
-    readonly reason?: "HOLD" | "NAME_EMPTY" | "NAME_TOO_LONG" | "NAME_CHARS",
+    readonly reason?: string,
+    /** Data tambahan non-rahasia untuk ack (mis. pelanggaran safeguard + alternatif). */
+    readonly detail?: unknown,
   ) {
     super(code);
     this.name = "RoomError";

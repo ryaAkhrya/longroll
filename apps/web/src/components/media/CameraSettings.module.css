@@ -1,0 +1,25 @@
+.wrap { display: flex; flex-direction: column; gap: 16px; }
+.head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.note { font-size: 13px; line-height: 1.45; color: var(--mute-text); }
+.preview {
+  position: relative; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden;
+  background: var(--stage2); touch-action: none; cursor: grab;
+}
+.preview:active { cursor: grabbing; }
+.previewEmpty { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, 0.7); font-size: 13px; font-weight: 600; }
+.dragHint {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  padding: 4px 10px; border-radius: var(--r-pill); background: var(--glass); color: #fff; font-size: 11.5px; font-weight: 700;
+  pointer-events: none;
+}
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toggle { width: 100%; }
+.sliders { display: flex; flex-direction: column; gap: 14px; }
+.select select {
+  height: 42px; max-width: 260px; padding: 0 12px; border: 0; border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line2); font-size: 14px;
+}
+:global([data-theme="stage"]) .select select { background: var(--stage3); box-shadow: none; color: #fff; }
+.compact { gap: 12px; }
+.compact .sliders { gap: 10px; }
+@media (pointer: coarse) { .select select { min-height: 44px; } }

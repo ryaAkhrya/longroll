@@ -67,6 +67,8 @@ function stateWithOne() {
     disconnectedAtMs: null,
     camera: "none",
     ready: false,
+    mirrored: false,
+    cameraPresentation: { zoom: 1, offset: { x: 0, y: 0 }, brightness: 0, warmth: 0 },
     tokenHash: "a".repeat(64),
     tokenIssuedAtMs: 1_000,
     prevTokenHash: null,

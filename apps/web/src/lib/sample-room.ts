@@ -1,4 +1,4 @@
-import { ROOM_DEFAULTS } from "@longroll/shared";
+import { DEFAULT_CAMERA_PRESENTATION, ROOM_DEFAULTS } from "@longroll/shared";
 import type { RoomView } from "@longroll/shared";
 
 /**
@@ -17,10 +17,13 @@ export const SAMPLE_ROOM: RoomView = {
   roomVersion: 3,
   lastSeq: 3,
   config: { graceSeconds: ROOM_DEFAULTS.graceSeconds, holdSeconds: ROOM_DEFAULTS.holdSeconds, maxParticipants: 4 },
+  activeSession: null,
+  sessionCount: 0,
+  customFrames: [],
   participants: [
-    { participantId: "p1", displayName: "Nadia", color: "P1", joinedAtMs: t, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: false },
-    { participantId: "p2", displayName: "Raka", color: "P2", joinedAtMs: t + 1, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: true },
-    { participantId: "p3", displayName: "Sasa", color: "P3", joinedAtMs: t + 2, connection: "RECONNECTING", disconnectedAtMs: t, camera: "none", ready: false },
+    { participantId: "p1", displayName: "Nadia", color: "P1", joinedAtMs: t, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: false, mirrored: false, cameraPresentation: DEFAULT_CAMERA_PRESENTATION },
+    { participantId: "p2", displayName: "Raka", color: "P2", joinedAtMs: t + 1, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: true, mirrored: false, cameraPresentation: DEFAULT_CAMERA_PRESENTATION },
+    { participantId: "p3", displayName: "Sasa", color: "P3", joinedAtMs: t + 2, connection: "RECONNECTING", disconnectedAtMs: t, camera: "none", ready: false, mirrored: false, cameraPresentation: DEFAULT_CAMERA_PRESENTATION },
   ],
 };
 

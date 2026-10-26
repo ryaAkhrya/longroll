@@ -1,0 +1,31 @@
+.wrap { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 640px; margin: 0 auto; padding: 12px var(--page-pad) calc(24px + var(--safe-bottom)); }
+.preview { position: relative; height: min(440px, 58dvh); border-radius: 28px; overflow: hidden; background: var(--stage2); box-shadow: var(--sh2); }
+.previewEmpty { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, 0.6); }
+.oval {
+  position: absolute; left: 50%; top: 46%; width: min(52%, 260px); aspect-ratio: 3 / 4; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 2px dashed rgba(255, 255, 255, 0.55); pointer-events: none;
+}
+.flip {
+  position: absolute; right: 12px; bottom: 12px; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: var(--glass); color: #fff; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.panel { display: flex; flex-direction: column; gap: 16px; }
+.title { margin-top: -6px; font-size: 38px; line-height: 0.95; }
+.title :global(.s) { font-size: 1.04em; color: var(--plum); letter-spacing: 0; }
+.lead { font-size: 14.5px; line-height: 1.55; color: var(--ink2); }
+.stateBox:empty { display: none; }
+.steps { margin: 8px 0 0; padding-left: 18px; list-style: decimal; display: flex; flex-direction: column; gap: 4px; }
+.checks { display: flex; flex-direction: column; gap: 12px; }
+.checks li { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--ink); }
+.ok { color: var(--ok); }
+.toggle { width: 100%; }
+.selectRow label { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.selectRow select { height: 40px; max-width: 220px; padding: 0 10px; border: 0; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line2); background: var(--surface); font-size: 14px; }
+.sliders { display: flex; flex-direction: column; gap: 12px; }
+.actions { display: flex; flex-direction: column; gap: 8px; }
+
+@media (min-width: 1024px) {
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: start; gap: 28px; max-width: 1180px; padding: 28px 20px; }
+  .preview { height: auto; aspect-ratio: 4 / 3; }
+  .title { font-size: 48px; }
+}

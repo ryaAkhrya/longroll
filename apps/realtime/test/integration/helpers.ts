@@ -32,6 +32,7 @@ export async function startServer(env: Record<string, string> = {}, store: RoomS
   const app = createRealtimeApp(config, store, storage);
   await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", () => r()));
   const { port } = app.server.address() as AddressInfo;
+  storage.signer.publicBaseUrl = `http://127.0.0.1:${port}`;
   return {
     app,
     base: `http://127.0.0.1:${port}`,

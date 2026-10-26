@@ -31,6 +31,11 @@ export interface SaveRoomInput {
   events: S2C[];
   /** Hanya peserta yang berubah yang ditulis. */
   changedParticipantIds: string[];
+  /** Hanya sesi yang berubah yang ditulis. */
+  changedSessionIds?: string[];
+  /** Frame custom yang berubah / dihapus (upload gagal atau kedaluwarsa). */
+  changedFrameIds?: string[];
+  deletedFrameIds?: string[];
 }
 
 export interface LoadedRoom {

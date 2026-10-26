@@ -1,7 +1,11 @@
+import { createHmac } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isCompleteRoomCode, LIMITS, normalizeRoomCode } from "@longroll/shared";
-import type { ErrorResponse, ParticipantView, PreviewResponse, SessionResponse } from "@longroll/shared";
+import { FRAME_LIMITS, isCompleteRoomCode, LIMITS, normalizeRoomCode } from "@longroll/shared";
+import type { ErrorResponse, IceServersResponse, ParticipantView, PreviewResponse, SessionResponse } from "@longroll/shared";
 import type { ServerConfig } from "../config";
+import type { FrameService } from "../frames/service";
+import type { LocalUrlSigner } from "../storage/signer";
+import type { ObjectStorage } from "../storage/types";
 import { log } from "../log";
 import type { RoomActor } from "../room/RoomActor";
 import type { RoomManager } from "../room/RoomManager";
@@ -30,11 +34,21 @@ interface ApiDeps {
   config: ServerConfig;
   manager: RoomManager;
   store: RoomStore;
+  storage: ObjectStorage;
+  frames: FrameService;
 }
 
-const ROUTE = /^\/api\/rooms\/([^/]+)\/(preview|join|session|leave)$/;
+const ROUTE = /^\/api\/rooms\/([^/]+)\/(preview|join|session|leave|turn-credentials)$/;
+const FRAME_ROUTE = /^\/api\/rooms\/([^/]+)\/frames(?:\/([0-9a-f-]{36})\/(complete|url))?$/;
+const STORAGE_ROUTE = /^\/api\/storage\/([A-Za-z0-9_\-.]{1,2048})$/;
 
-export function createApiHandler({ config, manager, store }: ApiDeps) {
+/** Storage lokal (memori/folder) menyajikan URL bertanda tangan lewat service ini. */
+type LocalStorage = ObjectStorage & { signer: LocalUrlSigner; contentTypeOf(key: string): string | null };
+function isLocal(s: ObjectStorage): s is LocalStorage {
+  return "signer" in s && "contentTypeOf" in s;
+}
+
+export function createApiHandler({ config, manager, store, storage, frames }: ApiDeps) {
   const limiter = new RateLimiter(store, config.rateLimitSalt);
 
   const wsUrlFor = (code: string) => `${config.publicWsUrl}?code=${encodeURIComponent(code)}`;
@@ -169,6 +183,99 @@ export function createApiHandler({ config, manager, store }: ApiDeps) {
   }
 
   /** Keluar (F-18): cabut token di server + hapus cookie HttpOnly (JS tidak bisa menghapusnya). */
+  /**
+   * ICE servers (14 §4, 13 §5): hanya untuk pemegang token room. Kredensial TURN sementara (HMAC, TTL
+   * default 1 jam) bila TURN_SHARED_SECRET + TURN_URLS diset; selain itu STUN saja (`turn: false`).
+   */
+  async function turnCredentials(req: IncomingMessage, res: ServerResponse, code: string) {
+    if (req.headers.origin !== undefined && !isAllowedOrigin(config, req.headers.origin)) return sendError(res, { error: "ORIGIN_FORBIDDEN" });
+    const found = isCompleteRoomCode(code) ? await manager.lookup(code) : ({ kind: "missing" } as const);
+    if (found.kind !== "open") return sendError(res, { error: found.kind === "expired" ? "ROOM_EXPIRED" : "ROOM_NOT_FOUND" });
+    const pid = found.actor.authenticate(tokenFromCookie(req, found.actor.roomId));
+    if (!pid) return sendError(res, { error: "AUTH_INVALID" });
+    const { stunUrls, turnUrls, turnSharedSecret, turnTtlSeconds } = config.ice;
+    const body: IceServersResponse = { iceServers: [], ttlSec: turnTtlSeconds, turn: false };
+    if (stunUrls.length) body.iceServers.push({ urls: stunUrls });
+    if (turnSharedSecret && turnUrls.length) {
+      const username = `${Math.floor(Date.now() / 1000) + turnTtlSeconds}:${pid}`;
+      const credential = createHmac("sha1", turnSharedSecret).update(username).digest("base64");
+      body.iceServers.push({ urls: turnUrls, username, credential });
+      body.turn = true;
+    }
+    sendJson(res, 200, body);
+  }
+
+  /** Pemegang cookie room ini (bukan LEFT). Mengirim error & null bila gagal. */
+  async function authed(req: IncomingMessage, res: ServerResponse, code: string): Promise<{ actor: RoomActor; pid: string } | null> {
+    const found = isCompleteRoomCode(code) ? await manager.lookup(code) : ({ kind: "missing" } as const);
+    if (found.kind !== "open") {
+      sendError(res, { error: found.kind === "expired" ? "ROOM_EXPIRED" : "ROOM_NOT_FOUND" });
+      return null;
+    }
+    const pid = found.actor.authenticate(tokenFromCookie(req, found.actor.roomId));
+    if (!pid) {
+      sendError(res, { error: "AUTH_INVALID" });
+      return null;
+    }
+    return { actor: found.actor, pid };
+  }
+
+  /** Frame custom (14 §4): presign, complete (validasi server), signed URL baca ≤ 10 menit. */
+  async function frameRoute(req: IncomingMessage, res: ServerResponse, code: string, frameId: string | undefined, action: string | undefined) {
+    if (req.method === "POST" && !requireOrigin(req, res)) return;
+    if (req.method === "GET" && req.headers.origin !== undefined && !isAllowedOrigin(config, req.headers.origin)) return sendError(res, { error: "ORIGIN_FORBIDDEN" });
+    const who = await authed(req, res, code);
+    if (!who) return;
+    if (!frameId && req.method === "POST") return sendJson(res, 200, await frames.prepare(who.actor, who.pid, await readJson(req)));
+    if (frameId && action === "complete" && req.method === "POST") return sendJson(res, 200, await frames.complete(who.actor, who.pid, frameId));
+    if (frameId && action === "url" && req.method === "GET") return sendJson(res, 200, await frames.url(who.actor, frameId));
+    sendJson(res, 405, { error: "BAD_REQUEST" });
+  }
+
+  /**
+   * URL bertanda tangan untuk storage LOKAL (meniru presigned S3). PUT hanya ke key upload mentah,
+   * Content-Type wajib sama dengan yang ditandatangani, body dibatasi ukuran deklarasi (≤ 10 MB).
+   */
+  async function storageRoute(req: IncomingMessage, res: ServerResponse, token: string) {
+    if (!isLocal(storage)) return sendJson(res, 404, { error: "BAD_REQUEST" });
+    const claims = storage.signer.verify(token);
+    if (!claims || claims.m !== req.method) return sendJson(res, 403, { error: "AUTH_INVALID" });
+    if (!claims.k.startsWith("rooms/") || claims.k.includes("..")) return sendJson(res, 403, { error: "AUTH_INVALID" });
+    if (req.method === "GET") {
+      const bytes = await storage.get(claims.k, FRAME_LIMITS.MAX_BYTES * 4);
+      if (!bytes) return sendJson(res, 404, { error: "FRAME_NOT_FOUND" });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", storage.contentTypeOf(claims.k) ?? "application/octet-stream");
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      res.setHeader("Content-Disposition", "inline");
+      res.end(Buffer.from(bytes));
+      return;
+    }
+    // PUT
+    if (!claims.k.endsWith(".upload") || !claims.ct || !claims.max) return sendJson(res, 403, { error: "AUTH_INVALID" });
+    const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    if (type !== claims.ct) return sendJson(res, 403, { error: "FRAME_UNSUPPORTED" });
+    const max = Math.min(claims.max, FRAME_LIMITS.MAX_BYTES);
+    const declared = Number(req.headers["content-length"] ?? "NaN");
+    if (Number.isFinite(declared) && declared > max) {
+      req.resume();
+      return sendError(res, { error: "FRAME_TOO_LARGE" });
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size > max) {
+        req.destroy();
+        return sendError(res, { error: "FRAME_TOO_LARGE" });
+      }
+      chunks.push(chunk as Buffer);
+    }
+    await storage.put(claims.k, Buffer.concat(chunks), claims.ct);
+    sendJson(res, 200, { ok: true });
+  }
+
   async function leave(req: IncomingMessage, res: ServerResponse, code: string) {
     if (!requireOrigin(req, res)) return;
     const found = isCompleteRoomCode(code) ? await manager.lookup(code) : ({ kind: "missing" } as const);
@@ -190,7 +297,7 @@ export function createApiHandler({ config, manager, store }: ApiDeps) {
           return true;
         }
         res.statusCode = 204;
-        res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type");
         res.setHeader("Access-Control-Max-Age", "600");
         res.end();
@@ -204,6 +311,16 @@ export function createApiHandler({ config, manager, store }: ApiDeps) {
         await createRoom(req, res);
         return true;
       }
+      const fm = FRAME_ROUTE.exec(url.pathname);
+      if (fm) {
+        await frameRoute(req, res, normalizeRoomCode(decodeURIComponent(fm[1]!)), fm[2], fm[3]);
+        return true;
+      }
+      const sm = STORAGE_ROUTE.exec(url.pathname);
+      if (sm) {
+        await storageRoute(req, res, sm[1]!);
+        return true;
+      }
       const m = ROUTE.exec(url.pathname);
       if (m) {
         const code = normalizeRoomCode(decodeURIComponent(m[1]!));
@@ -212,6 +329,7 @@ export function createApiHandler({ config, manager, store }: ApiDeps) {
         else if (action === "join" && req.method === "POST") await join(req, res, code);
         else if (action === "session" && req.method === "POST") await session(req, res, code);
         else if (action === "leave" && req.method === "POST") await leave(req, res, code);
+        else if (action === "turn-credentials" && req.method === "GET") await turnCredentials(req, res, code);
         else sendJson(res, 405, { error: "BAD_REQUEST" });
         return true;
       }

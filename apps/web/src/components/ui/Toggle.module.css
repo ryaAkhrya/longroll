@@ -1,0 +1,18 @@
+.row { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; }
+.label { font-size: 14px; font-weight: 600; color: var(--ink); }
+.track {
+  position: relative; flex: none; width: 40px; height: 24px; padding: 0; border: 0;
+  border-radius: var(--r-pill); background: var(--line2);
+  transition: background-color var(--motion-base);
+}
+.track::after { content: ""; position: absolute; inset: -10px -2px; }
+.knob {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: var(--sh1); transition: transform var(--motion-base);
+}
+.on { background: var(--plum); }
+.on .knob { transform: translateX(16px); }
+.track:disabled { opacity: 0.45; cursor: not-allowed; }
+:global([data-theme="stage"]) .track { background: var(--stage3); }
+:global([data-theme="stage"]) .on { background: #fff; }
+:global([data-theme="stage"]) .on .knob { background: var(--stage); }

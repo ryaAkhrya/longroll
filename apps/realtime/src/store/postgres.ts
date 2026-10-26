@@ -1,12 +1,12 @@
-import type { CameraState, ConnectionState, PlayerColor, RoomStatus, S2C } from "@longroll/shared";
-import { ROOM_DEFAULTS } from "@longroll/shared";
-import type { RoomState, ServerParticipant } from "../room/types";
+import type { CameraState, ConnectionState, PlayerColor, RoomStatus, S2C, SessionView } from "@longroll/shared";
+import { DEFAULT_CAMERA_PRESENTATION, ROOM_DEFAULTS, sanitizeCameraPresentation } from "@longroll/shared";
+import type { RoomState, ServerFrame, ServerParticipant } from "../room/types";
 import type { Db, Queryable } from "./db";
 import { StaleRevisionError, StoreUnavailableError, TOMBSTONE, windowStartMs } from "./types";
 import type { LoadedRoom, RoomStore, SaveRoomInput } from "./types";
 
 /** Versi skema yang wajib sudah dijalankan manual oleh pemilik database (db/migrations). */
-export const REQUIRED_SCHEMA_VERSION = "0001_p02_rooms";
+export const REQUIRED_SCHEMA_VERSION = "0004_p05_frames";
 
 /** ms epoch → timestamptz (NULL tetap NULL). */
 const TS = (n: number) => `to_timestamp($${n}::float8 / 1000)`;
@@ -38,10 +38,40 @@ interface ParticipantRow {
   disconnected_ms: number | null;
   camera: CameraState;
   ready: boolean;
+  mirrored: boolean;
+  camera_presentation: ServerParticipant["cameraPresentation"] | null;
   token_hash: string | null;
   token_issued_ms: number | null;
   prev_token_hash: string | null;
   prev_token_valid_until_ms: number | null;
+}
+
+interface SessionRow {
+  session_id: string;
+  idx: number;
+  state: SessionView["state"];
+  mode: SessionView["mode"];
+  created_ms: number;
+  created_by: string;
+  locked_ms: number | null;
+  voting: SessionView["voting"];
+  studio: SessionView["studio"];
+  event_log: SessionView["eventLog"];
+}
+
+interface FrameRow {
+  frame_id: string;
+  uploaded_by: string;
+  status: ServerFrame["status"];
+  file_name: string;
+  content_type: ServerFrame["contentType"];
+  declared_bytes: number;
+  raw_key: string;
+  object_key: string | null;
+  bytes: number | null;
+  template: ServerFrame["template"];
+  created_ms: number;
+  expires_ms: number | null;
 }
 
 interface EventRow {
@@ -132,7 +162,10 @@ export class PostgresRoomStore implements RoomStore {
     return this.run(() => this.db.transaction((tx) => this.saveInTx(tx, input)));
   }
 
-  private async saveInTx(tx: Queryable, { state, expectedRevision, events, changedParticipantIds }: SaveRoomInput) {
+  private async saveInTx(
+    tx: Queryable,
+    { state, expectedRevision, events, changedParticipantIds, changedSessionIds = [], changedFrameIds = [], deletedFrameIds = [] }: SaveRoomInput,
+  ) {
     const values = [
       state.roomId,
       state.code,
@@ -172,6 +205,19 @@ export class PostgresRoomStore implements RoomStore {
       if (p) await this.upsertParticipant(tx, state.roomId, p);
     }
 
+    for (const sid of changedSessionIds) {
+      const s = state.sessions[sid];
+      if (s) await this.upsertSession(tx, state.roomId, s);
+    }
+
+    for (const fid of changedFrameIds) {
+      const f = state.frames[fid];
+      if (f) await this.upsertFrame(tx, state.roomId, f);
+    }
+    if (deletedFrameIds.length) {
+      await tx.query("DELETE FROM lr_frames WHERE room_id = $1 AND frame_id = ANY($2::uuid[])", [state.roomId, deletedFrameIds]);
+    }
+
     for (const e of events) {
       await tx.query(
         `INSERT INTO lr_room_events (room_id, seq, type, payload, room_version, at)
@@ -188,15 +234,67 @@ export class PostgresRoomStore implements RoomStore {
     }
   }
 
+  private upsertSession(tx: Queryable, roomId: string, s: SessionView) {
+    return tx.query(
+      `INSERT INTO lr_sessions (session_id, room_id, idx, state, mode, created_at, created_by, locked_at, voting, studio, event_log, updated_at)
+       VALUES ($1, $2, $3, $4, $5, ${TS(6)}, $7, ${TS(8)}, $9::jsonb, $10::jsonb, $11::jsonb, now())
+       ON CONFLICT (session_id) DO UPDATE
+         SET state = EXCLUDED.state, mode = COALESCE(lr_sessions.mode, EXCLUDED.mode), locked_at = EXCLUDED.locked_at,
+             voting = EXCLUDED.voting, studio = EXCLUDED.studio, event_log = EXCLUDED.event_log, updated_at = now()
+         WHERE lr_sessions.room_id = EXCLUDED.room_id`,
+      [
+        s.sessionId,
+        roomId,
+        s.index,
+        s.state,
+        s.mode,
+        s.createdAtMs,
+        s.createdBy,
+        s.lockedAtMs,
+        JSON.stringify(s.voting),
+        s.studio === null ? null : JSON.stringify(s.studio),
+        JSON.stringify(s.eventLog),
+      ],
+    );
+  }
+
+  private upsertFrame(tx: Queryable, roomId: string, f: ServerFrame) {
+    return tx.query(
+      `INSERT INTO lr_frames (frame_id, room_id, uploaded_by, status, file_name, content_type, declared_bytes, raw_key,
+                              object_key, bytes, template, created_at, expires_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, ${TS(12)}, ${TS(13)}, now())
+       ON CONFLICT (frame_id) DO UPDATE
+         SET status = EXCLUDED.status, object_key = EXCLUDED.object_key, bytes = EXCLUDED.bytes,
+             template = EXCLUDED.template, expires_at = EXCLUDED.expires_at, updated_at = now()
+         WHERE lr_frames.room_id = EXCLUDED.room_id`,
+      [
+        f.frameId,
+        roomId,
+        f.uploadedBy,
+        f.status,
+        f.fileName,
+        f.contentType,
+        f.declaredBytes,
+        f.rawKey,
+        f.objectKey,
+        f.bytes,
+        f.template === null ? null : JSON.stringify(f.template),
+        f.createdAtMs,
+        f.expiresAtMs,
+      ],
+    );
+  }
+
   private upsertParticipant(tx: Queryable, roomId: string, p: ServerParticipant) {
     return tx.query(
       `INSERT INTO lr_participants (participant_id, room_id, display_name, color, joined_at, connection,
                                     disconnected_at, camera, ready, token_hash, token_issued_at,
-                                    prev_token_hash, prev_token_valid_until, updated_at)
-       VALUES ($1, $2, $3, $4, ${TS(5)}, $6, ${TS(7)}, $8, $9, $10, ${TS(11)}, $12, ${TS(13)}, now())
+                                    prev_token_hash, prev_token_valid_until, mirrored, camera_presentation, updated_at)
+       VALUES ($1, $2, $3, $4, ${TS(5)}, $6, ${TS(7)}, $8, $9, $10, ${TS(11)}, $12, ${TS(13)}, $14, $15::jsonb, now())
        ON CONFLICT (participant_id) DO UPDATE
          SET display_name = EXCLUDED.display_name, color = EXCLUDED.color, connection = EXCLUDED.connection,
              disconnected_at = EXCLUDED.disconnected_at, camera = EXCLUDED.camera, ready = EXCLUDED.ready,
+             mirrored = EXCLUDED.mirrored, camera_presentation = EXCLUDED.camera_presentation,
              token_hash = EXCLUDED.token_hash, token_issued_at = EXCLUDED.token_issued_at,
              prev_token_hash = EXCLUDED.prev_token_hash, prev_token_valid_until = EXCLUDED.prev_token_valid_until,
              updated_at = now()
@@ -215,6 +313,8 @@ export class PostgresRoomStore implements RoomStore {
         p.tokenIssuedAtMs,
         p.prevTokenHash,
         p.prevTokenValidUntilMs,
+        p.mirrored,
+        JSON.stringify(p.cameraPresentation),
       ],
     );
   }
@@ -231,10 +331,22 @@ export class PostgresRoomStore implements RoomStore {
       if (!row) return null;
       const people = await this.db.query<ParticipantRow>(
         `SELECT participant_id, display_name, color, ${MS("joined_at")} AS joined_ms, connection,
-                ${MS("disconnected_at")} AS disconnected_ms, camera, ready, token_hash,
+                ${MS("disconnected_at")} AS disconnected_ms, camera, ready, mirrored, camera_presentation, token_hash,
                 ${MS("token_issued_at")} AS token_issued_ms, prev_token_hash,
                 ${MS("prev_token_valid_until")} AS prev_token_valid_until_ms
            FROM lr_participants WHERE room_id = $1 ORDER BY joined_at, participant_id`,
+        [roomId],
+      );
+      const sess = await this.db.query<SessionRow>(
+        `SELECT session_id, idx, state, mode, ${MS("created_at")} AS created_ms, created_by, ${MS("locked_at")} AS locked_ms,
+                voting, studio, event_log
+           FROM lr_sessions WHERE room_id = $1 ORDER BY idx`,
+        [roomId],
+      );
+      const frs = await this.db.query<FrameRow>(
+        `SELECT frame_id, uploaded_by, status, file_name, content_type, declared_bytes, raw_key, object_key, bytes, template,
+                ${MS("created_at")} AS created_ms, ${MS("expires_at")} AS expires_ms
+           FROM lr_frames WHERE room_id = $1 ORDER BY created_at`,
         [roomId],
       );
       const evs = await this.db.query<EventRow>(
@@ -253,6 +365,8 @@ export class PostgresRoomStore implements RoomStore {
           disconnectedAtMs: p.disconnected_ms,
           camera: p.camera,
           ready: p.ready,
+          mirrored: p.mirrored ?? false,
+          cameraPresentation: sanitizeCameraPresentation(p.camera_presentation) ?? { ...DEFAULT_CAMERA_PRESENTATION },
           tokenHash: p.token_hash,
           tokenIssuedAtMs: p.token_issued_ms,
           prevTokenHash: p.prev_token_hash,
@@ -272,6 +386,42 @@ export class PostgresRoomStore implements RoomStore {
         roomVersion: Number(row.room_version),
         lastSeq: Number(row.last_seq),
         revision: Number(row.revision),
+        sessions: Object.fromEntries(
+          sess.rows.map((s) => [
+            s.session_id,
+            {
+              sessionId: s.session_id,
+              index: s.idx,
+              state: s.state,
+              createdAtMs: s.created_ms,
+              createdBy: s.created_by,
+              mode: s.mode,
+              lockedAtMs: s.locked_ms,
+              voting: s.voting,
+              studio: s.studio,
+              eventLog: s.event_log ?? [],
+            } satisfies SessionView,
+          ]),
+        ),
+        frames: Object.fromEntries(
+          frs.rows.map((f) => [
+            f.frame_id,
+            {
+              frameId: f.frame_id,
+              uploadedBy: f.uploaded_by,
+              status: f.status,
+              fileName: f.file_name,
+              contentType: f.content_type,
+              declaredBytes: Number(f.declared_bytes),
+              rawKey: f.raw_key,
+              objectKey: f.object_key,
+              bytes: f.bytes === null ? null : Number(f.bytes),
+              template: f.template,
+              createdAtMs: f.created_ms,
+              expiresAtMs: f.expires_ms,
+            } satisfies ServerFrame,
+          ]),
+        ),
       };
       const events: S2C[] = evs.rows.reverse().map((e) => ({
         type: e.type,
@@ -315,7 +465,9 @@ export class PostgresRoomStore implements RoomStore {
       const r = await this.db.query<{ n: string | number }>(
         `SELECT (SELECT count(*) FROM lr_rooms WHERE room_id = $1)
               + (SELECT count(*) FROM lr_participants WHERE room_id = $1)
-              + (SELECT count(*) FROM lr_room_events WHERE room_id = $1) AS n`,
+              + (SELECT count(*) FROM lr_room_events WHERE room_id = $1)
+              + (SELECT count(*) FROM lr_sessions WHERE room_id = $1)
+              + (SELECT count(*) FROM lr_frames WHERE room_id = $1) AS n`,
         [roomId],
       );
       return Number(r.rows[0]?.n ?? 0);

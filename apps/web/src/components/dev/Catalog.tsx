@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Plus, Trash2 } from "lucide-react";
-import { PLAYER_COLORS } from "@longroll/shared";
+import { DEFAULT_CAMERA_PRESENTATION, PLAYER_COLORS } from "@longroll/shared";
 import type { ParticipantView } from "@longroll/shared";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -36,6 +36,8 @@ const PEOPLE: ParticipantView[] = PLAYER_COLORS.map((color, i) => ({
   disconnectedAtMs: null,
   camera: "none",
   ready: false,
+  mirrored: false,
+  cameraPresentation: DEFAULT_CAMERA_PRESENTATION,
 }));
 
 export function Catalog() {

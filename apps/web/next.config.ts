@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 const realtimeUrl = process.env.NEXT_PUBLIC_REALTIME_URL ?? "http://localhost:4000";
 const realtimeWs = realtimeUrl.replace(/^http/, "ws");
+// Object storage S3-compatible (frame custom, P05): signed URL baca/tulis langsung ke origin storage.
+// Kosong = storage lokal yang disajikan service realtime.
+const storageOrigin = process.env.NEXT_PUBLIC_STORAGE_ORIGIN?.trim() ?? "";
 
 /**
  * CSP awal (15 §6). script-src memakai 'unsafe-inline' karena Next menyisipkan skrip inline;
@@ -12,10 +15,10 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob: ${realtimeUrl}${storageOrigin ? ` ${storageOrigin}` : ""}`,
   "media-src 'self' blob:",
   "font-src 'self'",
-  `connect-src 'self' ${realtimeUrl} ${realtimeWs}${isDev ? " ws://localhost:*" : ""}`,
+  `connect-src 'self' ${realtimeUrl} ${realtimeWs}${storageOrigin ? ` ${storageOrigin}` : ""}${isDev ? " ws://localhost:*" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

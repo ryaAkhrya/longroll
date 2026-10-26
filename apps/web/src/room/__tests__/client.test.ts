@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_CAMERA_PRESENTATION } from "@longroll/shared";
 import type { RoomView } from "@longroll/shared";
 import { applyEvent, backoffDelay } from "../client";
 import { createCursorSender, CursorStore } from "../cursors";
@@ -13,8 +14,11 @@ const room: RoomView = {
   roomVersion: 1,
   lastSeq: 1,
   config: { graceSeconds: 120, holdSeconds: 60, maxParticipants: 4 },
+  activeSession: null,
+  sessionCount: 0,
+  customFrames: [],
   participants: [
-    { participantId: "a", displayName: "A", color: "P1", joinedAtMs: 0, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: false },
+    { participantId: "a", displayName: "A", color: "P1", joinedAtMs: 0, connection: "CONNECTED", disconnectedAtMs: null, camera: "none", ready: false, mirrored: false, cameraPresentation: DEFAULT_CAMERA_PRESENTATION },
   ],
 };
 

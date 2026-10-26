@@ -1,16 +1,23 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { LocalUrlSigner } from "./signer";
 import type { ObjectStorage } from "./types";
+
+const TYPES: Record<string, string> = { png: "image/png", webp: "image/webp" };
 
 /**
  * Storage di folder lokal (dev). Semua key dibatasi di dalam `root`; key yang keluar dari root
- * (path traversal) ditolak. Tidak pernah menyentuh data di luar folder ini.
+ * (path traversal) ditolak. Tidak pernah menyentuh data di luar folder ini. BUKAN untuk produksi:
+ * tidak tahan multi-instance & disk ephemeral (lihat S3ObjectStorage).
  */
 export class FsObjectStorage implements ObjectStorage {
   readonly kind = "fs";
   private readonly root: string;
 
-  constructor(root: string) {
+  constructor(
+    root: string,
+    readonly signer: LocalUrlSigner = new LocalUrlSigner("http://localhost:4000"),
+  ) {
     this.root = resolve(root);
   }
 
@@ -37,5 +44,39 @@ export class FsObjectStorage implements ObjectStorage {
 
   async deleteMany(keys: string[]) {
     for (const key of keys) await rm(this.pathFor(key), { force: true });
+  }
+
+  async put(key: string, bytes: Uint8Array) {
+    const path = this.pathFor(key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, bytes);
+  }
+
+  async get(key: string, maxBytes: number) {
+    const size = await this.size(key);
+    if (size === null || size > maxBytes) return null;
+    return new Uint8Array(await readFile(this.pathFor(key)));
+  }
+
+  async size(key: string) {
+    try {
+      return (await stat(this.pathFor(key))).size;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+  }
+
+  async presignPut(key: string, opts: { contentType: string; bytes: number; expiresSec: number }) {
+    const url = this.signer.sign({ k: key, m: "PUT", e: Math.floor(Date.now() / 1000) + opts.expiresSec, ct: opts.contentType, max: opts.bytes });
+    return { url, headers: { "Content-Type": opts.contentType } };
+  }
+
+  async presignGet(key: string, expiresSec: number) {
+    return this.signer.sign({ k: key, m: "GET", e: Math.floor(Date.now() / 1000) + expiresSec });
+  }
+
+  contentTypeOf(key: string) {
+    return TYPES[key.split(".").pop() ?? ""] ?? "application/octet-stream";
   }
 }

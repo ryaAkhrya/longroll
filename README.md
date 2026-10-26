@@ -1,7 +1,7 @@
 # LONGROLL
 
 Photobooth online multiplayer (maks. 4 orang). Dokumentasi produk: [docs/00_README.md](docs/00_README.md).
-Status: **P02 — Room & Multiplayer** terverifikasi di Neon branch development. Handoff: [HANDOFF_P02.md](HANDOFF_P02.md), adaptasi Neon: [HANDOFF_P02_NEON.md](HANDOFF_P02_NEON.md).
+Status: **P05 — Photobooth Studio & Frame Engine** siap review (P03 kamera/WebRTC, P04 voting & sesi, P05 studio/frame). Handoff: [HANDOFF_P02.md](HANDOFF_P02.md), [HANDOFF_P02_NEON.md](HANDOFF_P02_NEON.md), [HANDOFF_P03.md](HANDOFF_P03.md), [HANDOFF_P04.md](HANDOFF_P04.md), [HANDOFF_P05.md](HANDOFF_P05.md). Migrasi Neon `development`: 0001–0004.
 
 ## Struktur
 

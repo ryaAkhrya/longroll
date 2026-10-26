@@ -287,3 +287,48 @@ describe("persistensi & kredensial", () => {
     expect(actor.authenticate(a.token)).toBeNull();
   });
 });
+
+describe("P03: presence kamera owner-only & relay sinyal", () => {
+  it("presence.set kamera/cermin/framing untuk diri sendiri tersiar; menyebut peserta lain ditolak (TC-SEC-012)", async () => {
+    const { actor } = setup();
+    const a = await joinAndAttach(actor, "A");
+    const b = await joinAndAttach(actor, "B");
+    const ok = await actor.intent(a.participant.participantId, "presence.set", {
+      camera: "live",
+      mirrored: true,
+      cameraPresentation: { zoom: 1.5, offset: { x: 0.2, y: 0 }, brightness: 0.1, warmth: 0 },
+    });
+    expect(ok).toEqual({ ok: true });
+    const pa = actor.snapshot().participants[a.participant.participantId]!;
+    expect(pa).toMatchObject({ camera: "live", mirrored: true });
+    expect(pa.cameraPresentation.zoom).toBe(1.5);
+    expect(b.conn.messages.some((m) => m.type === "presence.update" && (m.payload as { camera?: string }).camera === "live")).toBe(true);
+
+    const forged = await actor.intent(a.participant.participantId, "presence.set", { participantId: b.participant.participantId, camera: "off" });
+    expect(forged).toEqual({ ok: false, error: "FORBIDDEN_NOT_OWNER" });
+    expect(actor.snapshot().participants[b.participant.participantId]!.camera).toBe("none");
+  });
+
+  it("nilai kamera/framing tidak valid ditolak; framing di-clamp", async () => {
+    const { actor } = setup();
+    const a = await joinAndAttach(actor, "A");
+    expect(await actor.intent(a.participant.participantId, "presence.set", { camera: "hacked" })).toEqual({ ok: false, error: "BAD_REQUEST" });
+    expect(await actor.intent(a.participant.participantId, "presence.set", { cameraPresentation: { zoom: "x" } })).toEqual({ ok: false, error: "BAD_REQUEST" });
+    await actor.intent(a.participant.participantId, "presence.set", { cameraPresentation: { zoom: 9, offset: { x: -7, y: 0 }, brightness: 0, warmth: 0 } });
+    expect(actor.snapshot().participants[a.participant.participantId]!.cameraPresentation).toMatchObject({ zoom: 2, offset: { x: -1, y: 0 } });
+  });
+
+  it("sinyal RTC hanya ke peserta room yang terhubung, `from` diisi server", async () => {
+    const { actor } = setup();
+    const a = await joinAndAttach(actor, "A");
+    const b = await joinAndAttach(actor, "B");
+    expect(actor.relayRtc(a.participant.participantId, "rtc.offer", { to: b.participant.participantId, from: "palsu", pc: "pc1", sdp: { type: "offer", sdp: "v=0" } })).toBe(true);
+    const got = b.conn.messages.find((m) => m.type === "rtc.offer")!;
+    expect(got.payload).toMatchObject({ from: a.participant.participantId, pc: "pc1" });
+    expect(got.seq).toBeUndefined();
+    expect(actor.relayRtc(a.participant.participantId, "rtc.ice", { to: "orang-luar", pc: "pc1", candidate: null })).toBe(false);
+    expect(actor.relayRtc(a.participant.participantId, "rtc.ice", { to: a.participant.participantId, pc: "pc1", candidate: null })).toBe(false);
+    await actor.leave(b.participant.participantId);
+    expect(actor.relayRtc(a.participant.participantId, "rtc.restart", { to: b.participant.participantId, pc: "pc1" })).toBe(false);
+  });
+});

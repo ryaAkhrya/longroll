@@ -1,5 +1,6 @@
 import type { ParticipantView, RoomView } from "@longroll/shared";
 import { LIMITS } from "@longroll/shared";
+import { customFramesOf, publicSession } from "./studioLogic";
 import type { RoomState, ServerParticipant } from "./types";
 
 export function participantView(p: ServerParticipant): ParticipantView {
@@ -12,6 +13,8 @@ export function participantView(p: ServerParticipant): ParticipantView {
     disconnectedAtMs: p.disconnectedAtMs,
     camera: p.camera,
     ready: p.ready,
+    mirrored: p.mirrored,
+    cameraPresentation: p.cameraPresentation,
   };
 }
 
@@ -30,6 +33,9 @@ export function roomView(state: RoomState, config: { graceSeconds: number; holdS
     roomVersion: state.roomVersion,
     lastSeq: state.lastSeq,
     config: { graceSeconds: config.graceSeconds, holdSeconds: config.holdSeconds, maxParticipants: LIMITS.maxParticipants },
+    activeSession: state.activeSessionId && state.sessions[state.activeSessionId] ? publicSession(state.sessions[state.activeSessionId]!) : null,
+    sessionCount: state.sessionOrder.length,
+    customFrames: customFramesOf(state),
   };
 }
 

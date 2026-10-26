@@ -21,10 +21,12 @@ interface RoomHeaderProps {
   actions?: ReactNode;
   /** Buka konfirmasi keluar. Tanpa handler, tombol tidak ditampilkan aktif. */
   onLeave?: () => void;
+  /** Tengah (absolut): stepper sesi (P04). */
+  center?: ReactNode;
 }
 
 /** Header room desktop 60 px (04 §0.2), tanpa stepper sesi (SessionStepper dibangun di P04). Tampil ≥ 1024 px. */
-export function RoomHeader({ code, participants, statusTag, actions, onLeave }: RoomHeaderProps) {
+export function RoomHeader({ code, participants, statusTag, actions, onLeave, center }: RoomHeaderProps) {
   return (
     <header className={styles.desktop}>
       <div className={styles.left}>
@@ -35,6 +37,7 @@ export function RoomHeader({ code, participants, statusTag, actions, onLeave }: 
         <CopyCodeButton code={code} />
         {statusTag && <Tag>{statusTag}</Tag>}
       </div>
+      {center && <div className={styles.center}>{center}</div>}
       <div className={styles.right}>
         {actions}
         <AvatarStack participants={participants} size={30} />

@@ -22,6 +22,7 @@ export class RoomManager {
   private readonly loading = new Map<string, Promise<Lookup>>();
   private readonly cleanup: RoomCleanup;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly sweepHooks: ((actor: RoomActor) => Promise<void>)[] = [];
 
   constructor(
     private readonly store: RoomStore,
@@ -120,9 +121,17 @@ export class RoomManager {
     this.sweepTimer.unref?.();
   }
 
+  /** Pekerjaan berkala tambahan per actor (mis. upload frame PENDING kedaluwarsa). */
+  onSweep(hook: (actor: RoomActor) => Promise<void>) {
+    this.sweepHooks.push(hook);
+  }
+
   async sweep() {
     await this.recover().catch(() => undefined);
-    for (const actor of this.byCode.values()) await actor.checkTimers().catch(() => undefined);
+    for (const actor of this.byCode.values()) {
+      await actor.checkTimers().catch(() => undefined);
+      for (const hook of this.sweepHooks) await hook(actor).catch(() => undefined);
+    }
     try {
       const purged = await this.store.purgeExpired();
       if (purged.tombstones || purged.rateLimits || purged.staleReservations) log.info("store.purged", purged);

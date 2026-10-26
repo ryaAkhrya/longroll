@@ -48,6 +48,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON lr_rooms             TO longroll_app;
 GRANT SELECT, INSERT, UPDATE         ON lr_participants      TO longroll_app;
 GRANT SELECT, INSERT, DELETE         ON lr_room_events       TO longroll_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON lr_rate_limits       TO longroll_app;
+-- P04/P05 (tabel dari migrasi 0003/0004; migrasi itu juga memberi hak ini bila role sudah ada).
+GRANT SELECT, INSERT, UPDATE         ON lr_sessions          TO longroll_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON lr_frames            TO longroll_app;
 
 COMMIT;
 

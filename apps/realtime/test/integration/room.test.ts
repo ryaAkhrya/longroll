@@ -136,3 +136,98 @@ describe("WebSocket presence & lifecycle", () => {
     expect(await srv.store.countRoomData(roomId)).toBe(0);
   });
 });
+
+describe("P03: signaling WebRTC & ICE servers", () => {
+  it("rtc.* di-relay hanya ke target di room yang sama; `from` dari server; tidak bisa lintas room", async () => {
+    srv = await startServer();
+    const a = new Client(srv);
+    const code = (await a.create("Nadia")).body!.roomCode as string;
+    const sa = await a.connect(code);
+    const b = new Client(srv);
+    const joined = await b.join(code, "Raka");
+    const bId = joined.body!.participantId as string;
+    const sb = await b.connect(code);
+    const auth = await sa.waitFor("auth.ok");
+    const aId = (auth.payload as { participantId: string }).participantId;
+
+    sa.send("rtc.offer", { to: bId, from: "pemalsu", pc: "pc-a", sdp: { type: "offer", sdp: "v=0" } });
+    const offer = await sb.waitFor("rtc.offer");
+    expect(offer.payload).toMatchObject({ from: aId, pc: "pc-a" });
+
+    // Room lain: tidak bisa mengirim ke peserta room ini.
+    const x = new Client(srv);
+    const code2 = (await x.create("Orang Lain")).body!.roomCode as string;
+    const sx = await x.connect(code2);
+    sx.send("rtc.ice", { to: bId, pc: "pc-x", candidate: null });
+    sa.send("rtc.ice", { to: bId, pc: "pc-a", candidate: null });
+    const ice = await sb.waitFor("rtc.ice");
+    expect(ice.payload).toMatchObject({ from: aId });
+    expect(sb.messages.filter((m) => m.type === "rtc.ice")).toHaveLength(1);
+
+    // Bentuk salah dibuang diam-diam.
+    sa.send("rtc.answer", { to: bId, pc: "pc-a", sdp: { type: "offer", sdp: "x" } });
+    await sleep(100);
+    expect(sb.messages.some((m) => m.type === "rtc.answer")).toBe(false);
+  });
+
+  it("turn-credentials: butuh cookie; STUN saja bila TURN tidak dikonfigurasi", async () => {
+    srv = await startServer({ STUN_URLS: "stun:stun.example.test:3478" });
+    const a = new Client(srv);
+    const code = (await a.create("Nadia")).body!.roomCode as string;
+    expect((await new Client(srv).request("GET", `/api/rooms/${code}/turn-credentials`)).status).toBe(401);
+    const r = await a.request("GET", `/api/rooms/${code}/turn-credentials`);
+    expect(r.body).toMatchObject({ turn: false, iceServers: [{ urls: ["stun:stun.example.test:3478"] }] });
+  });
+
+  it("turn-credentials: HMAC sementara (username = expiry:participantId) bila TURN dikonfigurasi", async () => {
+    srv = await startServer({ TURN_URLS: "turn:turn.example.test:3478?transport=udp,turns:turn.example.test:443", TURN_SHARED_SECRET: "rahasia-uji", STUN_URLS: "none" });
+    const a = new Client(srv);
+    const created = await a.create("Nadia");
+    const code = created.body!.roomCode as string;
+    const r = await a.request("GET", `/api/rooms/${code}/turn-credentials`);
+    const turn = (r.body!.iceServers as { urls: string[]; username: string; credential: string }[])[0]!;
+    expect(r.body!.turn).toBe(true);
+    const [expiry, pid] = turn.username.split(":");
+    expect(pid).toBe(created.body!.participantId);
+    expect(Number(expiry)).toBeGreaterThan(Date.now() / 1000);
+    const { createHmac } = await import("node:crypto");
+    expect(turn.credential).toBe(createHmac("sha1", "rahasia-uji").update(turn.username).digest("base64"));
+  });
+});
+
+describe("P04: voting mode lewat WebSocket", () => {
+  it("4 peserta, suara bersamaan → hasil identik; Tutup vote awal ditolak; intent duplikat tidak menggandakan", async () => {
+    srv = await startServer();
+    const a = new Client(srv);
+    const code = (await a.create("Nadia")).body!.roomCode as string;
+    const clients = [a];
+    for (const n of ["Raka", "Sasa", "Dimas"]) {
+      const c = new Client(srv);
+      await c.join(code, n);
+      clients.push(c);
+    }
+    const socks = await Promise.all(clients.map((c) => c.connect(code)));
+
+    socks[3]!.send("session.create", {}, "s-1");
+    socks[3]!.send("session.create", {}, "s-1");
+    const ack = await socks[3]!.waitFor("ack", (m) => m.replyTo === "s-1");
+    expect(ack.payload).toEqual({ ok: true });
+    const st = await socks[0]!.waitFor("session.state");
+    const session = (st.payload as { session: { sessionId: string; voting: { round: number } } }).session;
+    await socks[0]!.waitFor("session.invite");
+
+    socks[0]!.send("vote.close", { sessionId: session.sessionId, round: 1 }, "c-early");
+    expect((await socks[0]!.waitFor("ack", (m) => m.replyTo === "c-early")).payload).toEqual({ ok: false, error: "CLOSE_NOT_ALLOWED" });
+
+    const modes = ["PHOTO_STRIP", "PHOTO_STRIP", "PHOTO_STRIP", "FREEFORM_COLLAGE"];
+    socks.forEach((s, i) => s.send("vote.cast", { sessionId: session.sessionId, round: 1, mode: modes[i] }, `v-${i}`));
+    const resolved = await Promise.all(socks.map((s) => s.waitFor("vote.resolved")));
+    expect(new Set(resolved.map((r) => JSON.stringify(r.payload))).size).toBe(1);
+    expect(resolved[0]!.payload).toMatchObject({ mode: "PHOTO_STRIP", method: "MAJORITY" });
+
+    socks[1]!.send("vote.cast", { sessionId: session.sessionId, round: 1, mode: "GROUP_SHOT" }, "late");
+    expect((await socks[1]!.waitFor("ack", (m) => m.replyTo === "late")).payload).toEqual({ ok: false, error: "MODE_LOCKED" });
+    const created = socks[3]!.messages.filter((m) => m.type === "session.invite");
+    expect(created).toHaveLength(1);
+  });
+});

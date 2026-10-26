@@ -1,0 +1,14 @@
+/* Absolut terhadap induk berukuran pasti: ukuran kanvas tidak boleh ikut membesarkan induknya (loop ukur). */
+.wrap { position: absolute; inset: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.canvas { position: relative; flex: none; box-shadow: var(--sh3); }
+.layer { position: absolute !important; inset: 0; }
+.passive { pointer-events: none; }
+.photos { position: absolute; inset: 0; pointer-events: none; }
+.slot { position: absolute; transform-origin: 50% 50%; }
+.photo { position: absolute; overflow: hidden; background: transparent; }
+.tile { position: absolute; overflow: hidden; }
+.thumbFilter { position: absolute; inset: 0; pointer-events: none; }
+.assetError {
+  position: absolute; left: 8px; bottom: 8px; margin: 0; padding: 4px 8px; border-radius: 8px;
+  background: rgba(27, 23, 32, 0.8); color: #fff; font-size: 11px; font-weight: 600;
+}

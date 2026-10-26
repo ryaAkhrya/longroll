@@ -15,6 +15,8 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     channel: "chrome",
     trace: "retain-on-failure",
+    // Kamera PALSU Chromium (pola uji bergerak), bukan perangkat nyata. Mikrofon tidak pernah diminta.
+    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] },
   },
   webServer: [
     {
@@ -22,12 +24,14 @@ export default defineConfig({
       cwd: "../..",
       url: "http://localhost:4000/api/health",
       reuseExistingServer: false,
+      stdout: "pipe",
       env: {
         PORT: "4000",
         ALLOWED_ORIGINS: "http://localhost:3000",
         ROOM_GRACE_PERIOD_SECONDS: "6",
         PARTICIPANT_HOLD_SECONDS: "4",
-        RATE_LIMIT_SALT: "e2e",
+        // Salt unik per run: counter rate limit kini persisten (PostgreSQL); batasnya sendiri tidak diubah.
+        RATE_LIMIT_SALT: `e2e-${Date.now()}`,
       },
     },
     {

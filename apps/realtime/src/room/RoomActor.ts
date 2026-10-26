@@ -1,20 +1,46 @@
 import { randomUUID } from "node:crypto";
 import {
+  CAMERA_STATES,
+  DEFAULT_CAMERA_PRESENTATION,
   LIMITS,
   PLAYER_COLORS,
   ROOM_DEFAULTS,
   WS_CLOSE,
+  sanitizeCameraPresentation,
   uniqueDisplayName,
   validateDisplayName,
 } from "@longroll/shared";
-import type { AckPayload, AuthOkPayload, CursorPayload, ParticipantView, RoomEvent, S2C } from "@longroll/shared";
+import type {
+  AckPayload,
+  AuthOkPayload,
+  CameraState,
+  CursorPayload,
+  ParticipantView,
+  RoomEvent,
+  RtcSignal,
+  RtcSignalType,
+  S2C,
+} from "@longroll/shared";
 import { log } from "../log";
 import { generateToken, hashEquals, hashToken } from "../security";
 import { StaleRevisionError, StoreUnavailableError } from "../store/types";
 import type { RoomStore } from "../store/types";
 import { participantView, roomView } from "./views";
+import { castVote, closeVote, closingExpired, connectedIds, createSession, onPresenceChanged } from "./sessionLogic";
+import type { StudioInit } from "./sessionLogic";
+import {
+  defaultStudioInit,
+  expirePendingFrames,
+  frameReady,
+  lockStructure,
+  prepareFrame,
+  studioRevert,
+  studioUpdate,
+  syncStudioParticipants,
+} from "./studioLogic";
+import type { FrameTemplate } from "@longroll/shared";
 import { RoomError } from "./types";
-import type { RoomConnection, RoomState, ServerParticipant } from "./types";
+import type { RoomConnection, RoomState, ServerFrame, ServerParticipant } from "./types";
 
 export interface ActorConfig {
   graceSeconds: number;
@@ -30,6 +56,8 @@ export interface ActorDeps {
   config: ActorConfig;
   /** Dipanggil sekali saat room masuk EXPIRING; manager menjalankan cleanup. */
   onExpiring: (actor: RoomActor) => void;
+  /** P05: inisialisasi studio saat mode terkunci. */
+  studioInit?: StudioInit;
 }
 
 interface BufferedEvent {
@@ -59,6 +87,7 @@ export class RoomActor {
   /** `events`: event tersimpan (mis. dari PostgreSQL setelah restart) agar resume tetap bisa replay. */
   constructor(state: RoomState, deps: ActorDeps, events: S2C[] = []) {
     this.state = state;
+    this.state.frames ??= {};
     this.deps = deps;
     for (const message of events.slice(-ROOM_DEFAULTS.eventBufferSize)) {
       if (message.seq !== undefined) this.buffer.push({ seq: message.seq, message });
@@ -77,6 +106,8 @@ export class RoomActor {
       participants: {},
       activeSessionId: null,
       sessionOrder: [],
+      sessions: {},
+      frames: {},
       roomVersion: 0,
       lastSeq: 0,
       revision: 0,
@@ -118,7 +149,10 @@ export class RoomActor {
   private async commit(mutate: (draft: RoomState, emit: (e: RoomEvent) => void) => void): Promise<S2C[]> {
     const draft = structuredClone(this.state);
     const events: RoomEvent[] = [];
-    mutate(draft, (e) => events.push(e));
+    const emit = (e: RoomEvent) => events.push(e);
+    mutate(draft, emit);
+    // Peserta berubah saat STUDIO sebelum shot 1 -> BindingPlan ikut (07 7.2), dalam commit yang sama.
+    syncStudioParticipants(draft, emit);
     const atMs = Date.now();
     const messages: S2C[] = events.map((e) => {
       draft.lastSeq += 1;
@@ -129,8 +163,21 @@ export class RoomActor {
     const changedParticipantIds = Object.keys(draft.participants).filter(
       (pid) => JSON.stringify(draft.participants[pid]) !== JSON.stringify(this.state.participants[pid]),
     );
+    const changedSessionIds = Object.keys(draft.sessions).filter(
+      (sid) => JSON.stringify(draft.sessions[sid]) !== JSON.stringify(this.state.sessions[sid]),
+    );
+    const changedFrameIds = Object.keys(draft.frames).filter((fid) => JSON.stringify(draft.frames[fid]) !== JSON.stringify(this.state.frames[fid]));
+    const deletedFrameIds = Object.keys(this.state.frames).filter((fid) => !draft.frames[fid]);
     try {
-      await this.deps.store.saveRoom({ state: draft, expectedRevision: this.state.revision, events: messages, changedParticipantIds });
+      await this.deps.store.saveRoom({
+        state: draft,
+        expectedRevision: this.state.revision,
+        events: messages,
+        changedParticipantIds,
+        changedSessionIds,
+        changedFrameIds,
+        deletedFrameIds,
+      });
     } catch (err) {
       log.warn("room.commit_failed", { roomId: draft.roomId, stale: err instanceof StaleRevisionError });
       // Revisi berbeda (commit ambigu / penulis lain): muat ulang dari store sebelum menerima tulisan baru.
@@ -202,6 +249,14 @@ export class RoomActor {
     }
   }
 
+  private connected(draft: RoomState): string[] {
+    return connectedIds(draft, (pid) => this.conns.has(pid));
+  }
+
+  private get studioInit(): StudioInit {
+    return this.deps.studioInit ?? defaultStudioInit;
+  }
+
   private assertOpen() {
     if (!this.isOpen) throw new RoomError("ROOM_EXPIRED");
   }
@@ -262,6 +317,8 @@ export class RoomActor {
         disconnectedAtMs: null,
         camera: "none",
         ready: false,
+        mirrored: false,
+        cameraPresentation: { ...DEFAULT_CAMERA_PRESENTATION, offset: { ...DEFAULT_CAMERA_PRESENTATION.offset } },
         tokenHash: hashToken(token),
         tokenIssuedAtMs: now,
         prevTokenHash: null,
@@ -383,6 +440,7 @@ export class RoomActor {
         dp.disconnectedAtMs = now;
         emit({ type: "presence.update", payload: { participantId, connection: "RECONNECTING", disconnectedAtMs: now } });
         this.applyRoomStatus(draft, emit, now);
+        onPresenceChanged(draft, emit, null, this.connected(draft).filter((id) => id !== participantId), now, this.studioInit);
       });
     } catch {
       // Store tidak tersedia: coba lagi nanti; peserta tetap terlihat CONNECTED sementara.
@@ -414,7 +472,10 @@ export class RoomActor {
       await this.handleIntent(participantId, type, payload);
       result = { ok: true };
     } catch (err) {
-      result = { ok: false, error: err instanceof RoomError ? err.code : "BAD_REQUEST" };
+      result =
+        err instanceof RoomError
+          ? { ok: false, error: err.code, ...(err.reason ? { reason: err.reason } : {}), ...(err.detail !== undefined ? { detail: err.detail } : {}) }
+          : { ok: false, error: "BAD_REQUEST" };
     }
     // Hasil SERVICE_UNAVAILABLE tidak di-cache: retry dengan clientEventId sama harus dicoba lagi.
     if (clientEventId && result.error !== "SERVICE_UNAVAILABLE") this.remember(participantId, clientEventId, result);
@@ -434,24 +495,158 @@ export class RoomActor {
         return this.leave(participantId);
       case "presence.set":
         return this.presenceSet(participantId, payload);
+      case "session.create":
+      case "vote.cast":
+      case "vote.close":
+      case "studio.update":
+      case "studio.revert":
+        return this.sessionIntent(participantId, type, payload);
       default:
         return Promise.reject(new RoomError("UNKNOWN_EVENT"));
     }
   }
 
-  /** P02: hanya `ready`. Kamera (P03) belum bisa diubah. Selalu untuk diri sendiri (14 §8.2). */
+  /**
+   * Presence milik sendiri (14 §5.2, 09 §4): ready, camera, mirrored, cameraPresentation.
+   * Server selalu memakai identitas terautentikasi; payload yang menyebut peserta lain ditolak
+   * FORBIDDEN_NOT_OWNER (REQ-CAM-13, TC-SEC-012). Tidak ada event yang mengontrol kamera orang lain.
+   */
   private presenceSet(participantId: string, payload: unknown): Promise<void> {
     return this.run(async () => {
       this.assertOpen();
       const p = this.state.participants[participantId];
       if (!p || p.connection !== "CONNECTED") throw new RoomError("NOT_CONNECTED");
-      const ready = (payload as { ready?: unknown } | null)?.ready;
-      if (typeof ready !== "boolean") throw new RoomError("BAD_REQUEST");
-      if (p.ready === ready) return;
+      if (!payload || typeof payload !== "object") throw new RoomError("BAD_REQUEST");
+      const input = payload as Record<string, unknown>;
+      if (input.participantId !== undefined && input.participantId !== participantId) throw new RoomError("FORBIDDEN_NOT_OWNER");
+
+      const patch: { ready?: boolean; camera?: CameraState; mirrored?: boolean; cameraPresentation?: ServerParticipant["cameraPresentation"] } = {};
+      if (input.ready !== undefined) {
+        if (typeof input.ready !== "boolean") throw new RoomError("BAD_REQUEST");
+        if (input.ready !== p.ready) patch.ready = input.ready;
+      }
+      if (input.camera !== undefined) {
+        if (!CAMERA_STATES.includes(input.camera as CameraState)) throw new RoomError("BAD_REQUEST");
+        if (input.camera !== p.camera) patch.camera = input.camera as CameraState;
+      }
+      if (input.mirrored !== undefined) {
+        if (typeof input.mirrored !== "boolean") throw new RoomError("BAD_REQUEST");
+        if (input.mirrored !== p.mirrored) patch.mirrored = input.mirrored;
+      }
+      if (input.cameraPresentation !== undefined) {
+        const cp = sanitizeCameraPresentation(input.cameraPresentation);
+        if (!cp) throw new RoomError("BAD_REQUEST");
+        if (JSON.stringify(cp) !== JSON.stringify(p.cameraPresentation)) patch.cameraPresentation = cp;
+      }
+      if (Object.keys(patch).length === 0) return;
       await this.commit((draft, emit) => {
-        draft.participants[participantId]!.ready = ready;
-        emit({ type: "presence.update", payload: { participantId, ready } });
+        Object.assign(draft.participants[participantId]!, patch);
+        emit({ type: "presence.update", payload: { participantId, ...patch } });
       });
+    });
+  }
+
+  /**
+   * Relay sinyal WebRTC (14 §5.3): hanya ke peserta lain di room yang sama yang sedang terhubung;
+   * `from` diisi dari identitas terautentikasi. Volatile & tidak pernah dicatat (NFR-09).
+   */
+  relayRtc(fromParticipantId: string, type: RtcSignalType, signal: RtcSignal): boolean {
+    const drop = (reason: string) => {
+      if (reason !== "no-socket") log.info("rtc.dropped", { roomId: this.roomId, type, reason });
+      return false;
+    };
+    // Pengirim cukup punya socket terautentikasi yang aktif: `auth.ok` dikirim sebelum commit CONNECTED
+    // selesai disimpan, jadi status tersimpan bisa sesaat masih RECONNECTING.
+    if (!this.isOpen || !this.conns.has(fromParticipantId) || this.state.participants[fromParticipantId]?.connection === "LEFT") return drop("sender");
+    if (signal.to === fromParticipantId) return drop("self");
+    const target = this.state.participants[signal.to];
+    const conn = this.conns.get(signal.to);
+    if (!target || target.connection === "LEFT") return drop("target");
+    if (!conn) return drop("no-socket");
+    conn.send({ type, atMs: Date.now(), payload: { ...signal, from: fromParticipantId } });
+    return true;
+  }
+
+  /** Aktivitas ringan volatile (mis. "lagi lihat Lilac Dream"), tidak disimpan. */
+  relayActivity(participantId: string, activity: string | null) {
+    if (!this.isOpen || !this.conns.has(participantId)) return;
+    this.broadcast({ type: "presence.activity", atMs: Date.now(), payload: { participantId, activity } }, participantId);
+  }
+
+  /** Intent sesi/voting (P04): validasi state di server, commit sebelum ack, tanpa hak khusus siapa pun. */
+  private sessionIntent(participantId: string, type: string, payload: unknown): Promise<void> {
+    return this.run(async () => {
+      this.assertOpen();
+      const p = this.state.participants[participantId];
+      if (!p || p.connection === "LEFT" || !this.conns.has(participantId)) throw new RoomError("NOT_CONNECTED");
+      const now = Date.now();
+      await this.commit((draft, emit) => {
+        const connected = this.connected(draft);
+        if (type === "session.create") createSession(draft, emit, participantId, now);
+        else if (type === "vote.cast") castVote(draft, emit, participantId, payload, connected, now, this.studioInit);
+        else if (type === "vote.close") closeVote(draft, emit, participantId, payload, connected, now);
+        else if (type === "studio.update") studioUpdate(draft, emit, participantId, payload, now);
+        else studioRevert(draft, emit, participantId, payload, now);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- frame custom (P05, 10 §9)
+
+  /** Presign upload: peserta aktif (bukan LEFT), tipe/ukuran deklarasi & kuota room diperiksa. */
+  framePrepare(participantId: string, input: { fileName: unknown; contentType: unknown; bytes: unknown }): Promise<ServerFrame> {
+    return this.run(async () => {
+      this.assertOpen();
+      const p = this.state.participants[participantId];
+      if (!p || p.connection === "LEFT") throw new RoomError("AUTH_INVALID");
+      let frame: ServerFrame | null = null;
+      const now = Date.now();
+      await this.commit((draft) => {
+        expirePendingFrames(draft, now);
+        frame = prepareFrame(draft, participantId, input, now);
+      });
+      return structuredClone(frame!);
+    });
+  }
+
+  /** Salinan record frame milik room (null bila tidak ada). */
+  frameRecord(frameId: string): ServerFrame | null {
+    const f = this.state.frames[frameId];
+    return f ? structuredClone(f) : null;
+  }
+
+  frameReady(frameId: string, result: { objectKey: string; bytes: number; template: FrameTemplate }): Promise<void> {
+    return this.run(async () => {
+      this.assertOpen();
+      await this.commit((draft, emit) => frameReady(draft, emit, frameId, result));
+    });
+  }
+
+  /** Upload gagal validasi -> baris dihapus (objek dihapus pemanggil). */
+  frameDiscard(frameId: string): Promise<void> {
+    return this.run(async () => {
+      if (!this.isOpen || this.state.frames[frameId]?.status !== "PENDING") return;
+      await this.commit((draft) => void delete draft.frames[frameId]);
+    });
+  }
+
+  /** Sweeper: upload PENDING kedaluwarsa -> key objek mentah yang harus dihapus dari storage. */
+  expireFrameUploads(): Promise<string[]> {
+    return this.run(async () => {
+      if (!this.isOpen) return [];
+      const now = Date.now();
+      if (!Object.values(this.state.frames).some((f) => f.status === "PENDING" && (f.expiresAtMs ?? 0) <= now)) return [];
+      let keys: string[] = [];
+      await this.commit((draft) => void (keys = expirePendingFrames(draft, now)));
+      return keys;
+    });
+  }
+
+  /** Kunci struktur studio setelah shot pertama (DEC-065). Dipanggil alur capture P06. */
+  lockStudioStructure(sessionId: string): Promise<void> {
+    return this.run(async () => {
+      this.assertOpen();
+      await this.commit((draft, emit) => lockStructure(draft, emit, sessionId));
     });
   }
 
@@ -469,8 +664,10 @@ export class RoomActor {
         dp.prevTokenHash = null;
         dp.prevTokenValidUntilMs = null;
         dp.ready = false;
+        dp.camera = "none";
         emit({ type: "participant.left", payload: { participantId } });
         this.applyRoomStatus(draft, emit, now);
+        onPresenceChanged(draft, emit, participantId, this.connected(draft).filter((id) => id !== participantId), now, this.studioInit);
       });
       this.clearConnectDeadline(participantId);
       const conn = this.conns.get(participantId);
@@ -481,7 +678,7 @@ export class RoomActor {
 
   /** Kursor volatile (07 §8): tidak disimpan, tidak masuk antrean, tanpa seq. */
   relayCursor(participantId: string, payload: CursorPayload) {
-    if (!this.isOpen || this.state.participants[participantId]?.connection !== "CONNECTED") return;
+    if (!this.isOpen || !this.conns.has(participantId)) return;
     this.broadcast({ type: "cursor.move", atMs: Date.now(), payload: { ...payload, participantId } }, participantId);
   }
 
@@ -524,7 +721,7 @@ export class RoomActor {
   /** Jadwalkan ulang timer dari timestamp tersimpan (aman setelah restart). */
   private reconcileTimers() {
     for (const [key, t] of this.timers) {
-      if (key.startsWith("hold:") || key === "grace" || key.startsWith("lifetime")) {
+      if (key.startsWith("hold:") || key === "grace" || key.startsWith("lifetime") || key === "vote-closing") {
         clearTimeout(t);
         this.timers.delete(key);
       }
@@ -536,6 +733,18 @@ export class RoomActor {
       if (p.connection !== "RECONNECTING" || p.disconnectedAtMs === null) continue;
       const pid = p.participantId;
       this.setTimer(`hold:${pid}`, p.disconnectedAtMs + holdSeconds * 1000 - now, () => this.holdExpired(pid));
+    }
+    const active = this.state.activeSessionId ? this.state.sessions[this.state.activeSessionId] : null;
+    if (active?.state === "VOTING" && active.voting.phase === "CLOSING" && active.voting.closingAtMs !== null) {
+      // Jendela "Tutup vote" (DEC-023); dilanjutkan dari closingAtMs tersimpan setelah restart.
+      this.setTimer("vote-closing", active.voting.closingAtMs - now, () =>
+        this.run(async () => {
+          const s = this.state.activeSessionId ? this.state.sessions[this.state.activeSessionId] : null;
+          if (s?.voting.phase !== "CLOSING") return;
+          if ((s.voting.closingAtMs ?? 0) > Date.now()) return this.reconcileTimers();
+          await this.commit((draft, emit) => void closingExpired(draft, emit, Date.now(), this.studioInit));
+        }),
+      );
     }
     if (this.state.status === "GRACE" && this.state.emptySinceMs !== null) {
       this.setTimer("grace", this.state.emptySinceMs + graceSeconds * 1000 - now, () => this.graceExpired());
@@ -567,7 +776,9 @@ export class RoomActor {
         dp.prevTokenHash = null;
         dp.prevTokenValidUntilMs = null;
         dp.ready = false;
+        dp.camera = "none";
         emit({ type: "participant.left", payload: { participantId } });
+        onPresenceChanged(draft, emit, participantId, this.connected(draft), Date.now(), this.studioInit);
       });
     });
   }

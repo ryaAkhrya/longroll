@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { iconProps } from "@/components/ui/icon-props";
 import { InvitePanel } from "./InvitePanel";
-import { ParticipantSlot } from "./ParticipantSlot";
+import { CameraTile } from "@/components/media/CameraTile";
 import styles from "./LobbyLayout.module.css";
 
 interface LobbyLayoutProps {
@@ -19,6 +19,9 @@ interface LobbyLayoutProps {
   clockOffsetMs?: number;
   /** Lapisan di atas grid (mis. kursor permukaan dev). */
   gridOverlay?: ReactNode;
+  onOpenCameraPanel?: () => void;
+  /** Mulai voting (siapa pun, REQ-ROOM-07). Tanpa handler: pratinjau statis. */
+  onStartVote?: () => void;
 }
 
 const COUNT_WORD = ["", "sendiri", "berdua", "bertiga"];
@@ -36,15 +39,14 @@ function statusLine(p: ParticipantView, isSelf: boolean) {
 
 /**
  * Lobby SCR-05 (V1): grid 4 slot berdasarkan warna (P1..P4), panel undangan, daftar peserta, CTA.
- * "Mulai vote mode" milik P04: hanya tampil di dev, nonaktif dengan label "Segera".
+ * "Mulai vote mode" (P04): siapa pun boleh memulai voting; tanpa `onStartVote` tombol nonaktif (pratinjau statis).
  */
-export function LobbyLayout({ room, meId, inviteUrl, clockOffsetMs = 0, gridOverlay }: LobbyLayoutProps) {
+export function LobbyLayout({ room, meId, inviteUrl, clockOffsetMs = 0, gridOverlay, onOpenCameraPanel, onStartVote }: LobbyLayoutProps) {
   const total = room.config.maxParticipants;
   const active = room.participants.filter((p) => p.connection !== "LEFT");
   const byColor = new Map(active.map((p) => [p.color, p]));
   const joined = active.length;
   const sub = subtitle(joined, total);
-  const showVoteStub = process.env.NODE_ENV !== "production";
 
   return (
     <div className={styles.lobby}>
@@ -61,7 +63,7 @@ export function LobbyLayout({ room, meId, inviteUrl, clockOffsetMs = 0, gridOver
             {PLAYER_COLORS.slice(0, total).map((color, i) => {
               const p = byColor.get(color);
               return (
-                <ParticipantSlot
+                <CameraTile
                   key={p?.participantId ?? `empty-${color}`}
                   participant={p}
                   isSelf={!!p && p.participantId === meId}
@@ -69,6 +71,7 @@ export function LobbyLayout({ room, meId, inviteUrl, clockOffsetMs = 0, gridOver
                   inviteUrl={inviteUrl}
                   holdSeconds={room.config.holdSeconds}
                   clockOffsetMs={clockOffsetMs}
+                  onOpenCameraPanel={p && p.participantId === meId ? onOpenCameraPanel : undefined}
                 />
               );
             })}
@@ -100,16 +103,16 @@ export function LobbyLayout({ room, meId, inviteUrl, clockOffsetMs = 0, gridOver
             ))}
           </ul>
         </Card>
-        {showVoteStub && (
+        {(
           <Card as="section" aria-label="Mulai voting" className={styles.cta}>
             <div className={styles.ctaText}>
               <h2 className={`d ${styles.ctaTitle}`}>Udah siap pilih mode?</h2>
               <p>Siapa aja boleh mulai. Yang telat tetap bisa nyusul.</p>
             </div>
-            <Button variant="primary" size="xl" fullWidth disabled iconAfter={<ArrowRight size={18} {...iconProps} />}>
-              Mulai vote mode · Segera
+            <Button variant="primary" size="xl" fullWidth disabled={!onStartVote} onClick={onStartVote} iconAfter={<ArrowRight size={18} {...iconProps} />}>
+              Mulai vote mode
             </Button>
-            <p className={styles.mobNote}>Siapa aja boleh mulai · voting hadir di tahap berikutnya</p>
+            <p className={styles.mobNote}>Siapa aja boleh mulai · {joined > 1 ? `bisa mulai ${COUNT_WORD[joined] ?? "bareng"}` : "bisa sendiri"}</p>
           </Card>
         )}
       </aside>

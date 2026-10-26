@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@longroll/shared": "*",
+    "konva": "^10.9.0",
     "lucide-react": "^1.61.0",
     "next": "^16.4.3",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-konva": "^19.3.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

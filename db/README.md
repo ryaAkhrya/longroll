@@ -8,6 +8,9 @@ saat start ia hanya memeriksa bahwa `lr_schema_migrations` berisi versi yang dib
 | File | Sifat | Kapan |
 |---|---|---|
 | `migrations/0001_p02_rooms.sql` | Idempoten, non-destruktif, satu transaksi | Wajib sebelum service memakai `DATABASE_URL` |
+| `migrations/0002_p03_camera.sql` | Idempoten, non-destruktif (ADD COLUMN) | P03 |
+| `migrations/0003_p04_sessions.sql` | Idempoten, non-destruktif (`lr_sessions`) | P04 |
+| `migrations/0004_p05_frames.sql` | Idempoten, non-destruktif (`lr_frames`, indeks aset frame custom) | P05 — service mensyaratkan versi ini |
 | `maintenance/inspect.sql` | Read-only | Setelah migrasi / kapan saja |
 | `maintenance/grants_template.sql` | Membuat role `longroll_app` + hak minimum | Wajib sebelum service memakai database |
 | `maintenance/purge_expired.sql` | Hanya baris kedaluwarsa | Opsional; service sudah mem-purge berkala |
@@ -30,7 +33,9 @@ saat start ia hanya memeriksa bahwa `lr_schema_migrations` berisi versi yang dib
    `store.unreachable` = koneksi/kredensial/jaringan.
 7. Setelah dev branch terverifikasi, ulangi langkah 1–5 di branch produksi.
 
-Tidak ada migrasi lain untuk P02. Urutan file berikutnya mengikuti nomor (`0002_…`, dst.).
+Migrasi dijalankan berurutan sesuai nomor; setiap file mencatat versinya di `lr_schema_migrations` dan
+memberi hak DML minimum ke `longroll_app` bila role sudah ada. Jangan menjalankan ulang file yang versinya
+sudah tercatat. Status di Neon `development`: 0001–0004 diterapkan (2026-10-26). Produksi: belum.
 
 ## Perilaku data (tanpa TTL bawaan)
 
