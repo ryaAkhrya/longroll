@@ -1,0 +1,2 @@
+.stack { display: inline-flex; align-items: center; }
+.stack > * + * { margin-left: -7px; }

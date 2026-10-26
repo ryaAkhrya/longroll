@@ -1,0 +1,31 @@
+.scrim { position: fixed; inset: 0; z-index: 60; background: rgba(27, 23, 32, 0.28); animation: fade var(--motion-base) both; }
+.sheet {
+  position: fixed; z-index: 61; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  margin: 0 auto; width: 100%; max-width: 640px;
+  padding: 0 max(16px, var(--safe-left)) max(34px, calc(var(--safe-bottom) + 16px));
+  background: var(--surface); color: var(--ink);
+  border-radius: 24px 24px 0 0;
+  box-shadow: var(--sh-sheet);
+  transition: height var(--motion-sheet);
+  animation: up var(--motion-sheet) both;
+}
+.half { height: 45dvh; min-height: 280px; }
+.full { height: 90dvh; }
+:global([data-theme="stage"]) .sheet { background: var(--stage2); }
+
+.handleArea { display: grid; place-items: center; height: 24px; cursor: grab; touch-action: none; }
+.handle { width: 36px; height: 5px; border-radius: 3px; background: var(--line2); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; }
+.title { font-size: 18px; line-height: 1.2; outline: none; }
+.title:focus-visible { box-shadow: none; }
+.close {
+  position: relative; display: grid; place-items: center; flex: none;
+  width: 34px; height: 34px; border: 0; border-radius: var(--r-sm);
+  background: var(--sunk); color: var(--ink2);
+}
+.close::after { content: ""; position: absolute; inset: -5px; }
+.body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+@keyframes up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }

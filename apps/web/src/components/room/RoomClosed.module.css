@@ -1,0 +1,11 @@
+.wrap { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 480px; margin: 0 auto; padding: 32px 0; }
+.art { position: relative; width: 150px; height: 190px; margin-bottom: 28px; }
+.back, .front { position: absolute; width: 96px; }
+.back { left: 0; top: 14px; transform: rotate(-8deg); opacity: 0.7; }
+.front { right: 0; top: 0; transform: rotate(5deg); }
+.code { color: var(--mute-text); }
+.title { margin-top: 10px; font-size: 44px; line-height: 0.95; }
+.title :global(.s) { font-size: 1.04em; color: var(--plum); letter-spacing: 0; }
+.text { margin-top: 14px; font-size: 15px; line-height: 1.55; color: var(--ink2); }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 28px; }
+@media (min-width: 1024px) { .title { font-size: 56px; } }

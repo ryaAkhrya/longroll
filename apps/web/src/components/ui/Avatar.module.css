@@ -1,0 +1,17 @@
+.avatar {
+  position: relative; display: inline-grid; place-items: center; flex: none;
+  border-radius: var(--r-pill); font-weight: 700; line-height: 1;
+}
+.P1 { background: var(--p1-tint); color: var(--p1-deep); }
+.P2 { background: var(--p2-tint); color: var(--p2-deep); }
+.P3 { background: var(--p3-tint); color: var(--p3-deep); }
+.P4 { background: var(--p4-tint); color: var(--p4-deep); }
+.ring { box-shadow: 0 0 0 2px var(--bg); }
+
+.dot {
+  position: absolute; right: -1px; bottom: -1px;
+  border-radius: var(--r-pill); box-shadow: 0 0 0 2px var(--surface);
+}
+.online { background: var(--ok); }
+.pending { background: var(--warn); }
+.away { background: var(--faint); }

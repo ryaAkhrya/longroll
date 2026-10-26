@@ -1,0 +1,3 @@
+.container { width: 100%; max-width: var(--content-max); margin: 0 auto; padding-left: var(--page-pad); padding-right: var(--page-pad); }
+.narrow { max-width: calc(640px + var(--page-pad) * 2); }
+@media (min-width: 1440px) { .container { max-width: 1440px; } .narrow { max-width: calc(640px + var(--page-pad) * 2); } }

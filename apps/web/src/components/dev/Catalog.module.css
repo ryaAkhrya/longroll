@@ -1,0 +1,10 @@
+.page { background: var(--bg); color: var(--ink); }
+.intro { padding: 32px var(--page-pad) 8px; display: flex; flex-direction: column; gap: 8px; }
+.intro h1 { font-size: 40px; }
+.intro p { color: var(--ink2); }
+.theme { padding: 32px var(--page-pad) 48px; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; gap: 28px; }
+.h2 { font-size: 30px; }
+.group { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.col { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; max-width: 520px; }

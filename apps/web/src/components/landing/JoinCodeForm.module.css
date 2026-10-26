@@ -1,0 +1,19 @@
+.form { display: flex; flex-direction: column; gap: 6px; }
+.group {
+  display: flex; align-items: center; gap: 6px;
+  height: 56px; padding: 6px 6px 6px 16px;
+  background: var(--surface); border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--line2);
+  transition: box-shadow var(--motion-fast);
+}
+.group:focus-within { box-shadow: inset 0 0 0 1.5px var(--plum), 0 0 0 4px rgba(102, 80, 174, 0.14); }
+.invalid, .invalid:focus-within { box-shadow: inset 0 0 0 1.5px var(--err); }
+.input {
+  flex: 1; min-width: 0; height: 100%;
+  border: 0; background: transparent; outline: none;
+  font-size: 16px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink);
+}
+.input:focus-visible { box-shadow: none; }
+.input::placeholder { color: var(--mute-text); font-weight: 500; letter-spacing: 0.1em; }
+.error { padding-left: 4px; font-size: 12.5px; color: var(--err); }
+.error:empty { display: none; }

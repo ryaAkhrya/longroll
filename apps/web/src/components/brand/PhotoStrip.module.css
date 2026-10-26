@@ -1,0 +1,14 @@
+.strip {
+  position: relative; display: flex; flex-direction: column; gap: 3.5%;
+  width: 100%; padding: 6% 6% 4%;
+  background: #fff; border-radius: 4px;
+  box-shadow: var(--sh2);
+}
+.cell { display: block; aspect-ratio: 1 / 0.82; border-radius: 2px; overflow: hidden; }
+.empty { background: var(--sunk); box-shadow: inset 0 0 0 1.5px var(--line2); }
+.foot { display: flex; align-items: center; justify-content: space-between; padding-top: 2%; }
+.date { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7px; letter-spacing: 0.1em; color: var(--mute-text); }
+.tape {
+  position: absolute; top: -8px; left: 50%; width: 36%; height: 16px; transform: translateX(-50%) rotate(-2deg);
+  background: rgba(205, 192, 240, 0.85);
+}

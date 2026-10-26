@@ -1,0 +1,5 @@
+.badge {
+  align-self: flex-start; padding: 6px 12px;
+  border-radius: var(--r-pill); background: var(--warn-bg); color: var(--retention-ink);
+  font-size: 12px; line-height: 1.3;
+}

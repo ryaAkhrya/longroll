@@ -1,0 +1,115 @@
+/* LONGROLL design tokens (05 §2-§4, §13, §16). Nilai V1 kecuali ditandai PROPOSED. */
+:root {
+  /* Warna inti (V1) */
+  --bg: #f6f3ee;
+  --surface: #ffffff;
+  --sunk: #efebe5;
+  --line: #e6e0d8;
+  --line2: #d9d1c7;
+  --ink: #1b1720;
+  --ink2: #4a4451;
+  --mute: #857e8c; /* ikon / label besar / dekoratif saja */
+  --mute-text: #6f6876; /* PROPOSED: koreksi kontras 05 §2.5 */
+  --faint: #b7b0bb; /* dekoratif / disabled */
+  --plum: #3b2350;
+  --plum2: #4f3069; /* PROPOSED: hover */
+  --lav: #ede7f7;
+  --lavd: #6650ae;
+  --rec: #e5484d;
+  --ok: #23845c;
+  --warn: #8c5e10; /* PROPOSED: koreksi kontras (V1: #a87114) */
+  --err: #c03b3a;
+
+  /* Status semantik (05 §2.4) */
+  --ok-bg: #ddf1e6;
+  --warn-bg: #f6edc6;
+  --warn-ink: #7a5f12;
+  --err-bg: #f8e2e1;
+  --retention-ink: #5e4a12;
+
+  /* Stage */
+  --stage: #131015;
+  --stage2: #1d1920;
+  --stage3: #29242d;
+  --sline: rgba(255, 255, 255, 0.08);
+  --glass: rgba(19, 16, 21, 0.42);
+
+  /* Warna pemain (identitas orang, bukan aksi) */
+  --p1-tint: #fbe4d8; --p1-mid: #f2ae8c; --p1-deep: #9c4a27;
+  --p2-tint: #f6edc6; --p2-mid: #e2c352; --p2-deep: #7a5f12;
+  --p3-tint: #d9f0e4; --p3-mid: #7fc6a2; --p3-deep: #22684a;
+  --p4-tint: #e8e2f8; --p4-mid: #a592e0; --p4-deep: #56429f;
+
+  /* Logo ikut tema (LogoMark tanpa prop tone) */
+  --logo: #3b2350;
+  --logo-hole: #f6f3ee;
+
+  /* Fokus (PROPOSED) */
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px #8e74c9;
+
+  /* Font */
+  --font-display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --font-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", "Times New Roman", Georgia, serif;
+
+  /* Radius */
+  --r-xs: 8px; --r-sm: 10px; --r-md: 12px; --r-lg: 16px;
+  --r-xl: 20px; --r-2xl: 28px; --r-pill: 999px;
+
+  /* Bayangan */
+  --sh1: 0 1px 2px rgba(27, 23, 32, 0.05), 0 2px 10px rgba(27, 23, 32, 0.05);
+  --sh2: 0 2px 6px rgba(27, 23, 32, 0.06), 0 14px 34px rgba(27, 23, 32, 0.09);
+  --sh3: 0 10px 26px rgba(27, 23, 32, 0.12), 0 36px 70px rgba(27, 23, 32, 0.14);
+  --sh-plum: 0 1px 2px rgba(59, 35, 80, 0.3), 0 6px 16px rgba(59, 35, 80, 0.18);
+  --sh-sheet: 0 -10px 40px rgba(19, 16, 21, 0.18);
+
+  /* Motion (PROPOSED) */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-fast: 120ms var(--ease);
+  --motion-base: 200ms var(--ease);
+  --motion-sheet: 280ms var(--ease-sheet);
+  --motion-emph: 420ms var(--ease);
+
+  /* Layout */
+  --page-pad: 16px;
+  --content-max: 1280px;
+  --header-h: 52px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+@media (min-width: 600px) {
+  :root { --page-pad: 24px; }
+}
+@media (min-width: 1024px) {
+  :root { --page-pad: 56px; --header-h: 60px; }
+}
+
+/* Tema stage: workspace photobooth gelap (REQ-UI-03). */
+[data-theme="stage"] {
+  --bg: var(--stage);
+  --surface: var(--stage2);
+  --sunk: var(--stage3);
+  --line: var(--sline);
+  --line2: rgba(255, 255, 255, 0.14);
+  --ink: #ffffff;
+  --ink2: rgba(255, 255, 255, 0.78);
+  --mute-text: rgba(255, 255, 255, 0.62);
+  --focus-ring: 0 0 0 2px var(--stage), 0 0 0 4px #b9a6ee;
+  --logo: #f6f3ee;
+  --logo-hole: var(--stage);
+  background: var(--stage);
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 80ms linear;
+    --motion-base: 100ms linear;
+    --motion-sheet: 120ms linear;
+    --motion-emph: 120ms linear;
+  }
+}

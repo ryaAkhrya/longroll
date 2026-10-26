@@ -1,0 +1,16 @@
+.header { padding-top: var(--safe-top); }
+.inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
+.logo { display: inline-flex; border-radius: var(--r-xs); }
+.nav { display: none; margin-left: auto; gap: 28px; font-size: 13.5px; font-weight: 500; color: var(--ink2); }
+.nav a { padding: 8px 0; border-radius: var(--r-xs); }
+.nav a:hover { color: var(--ink); }
+.short { display: inline; }
+.long { display: none; }
+.join { flex: none; }
+
+@media (min-width: 1024px) {
+  .inner { height: 72px; }
+  .nav { display: flex; }
+  .short { display: none; }
+  .long { display: inline; }
+}

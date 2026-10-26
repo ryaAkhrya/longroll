@@ -1,0 +1,61 @@
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--motion-fast), transform var(--motion-fast), box-shadow var(--motion-fast);
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled { cursor: not-allowed; background: var(--sunk); color: var(--faint); box-shadow: none; }
+.loading { cursor: progress; }
+.full { width: 100%; }
+
+.sm { height: 34px; padding: 0 12px; border-radius: var(--r-sm); font-size: 13px; }
+.md { height: 42px; padding: 0 16px; border-radius: var(--r-md); font-size: 14px; }
+.lg { height: 50px; padding: 0 22px; border-radius: var(--r-lg); font-size: 15px; }
+.xl { height: 56px; padding: 0 26px; border-radius: var(--r-lg); font-size: 16px; }
+.iconOnly.sm { width: 34px; padding: 0; }
+.iconOnly.md { width: 42px; padding: 0; }
+.iconOnly.lg { width: 50px; padding: 0; }
+.iconOnly.xl { width: 56px; padding: 0; }
+
+/* Target sentuh >= 44 px pada pointer kasar (06 §4) */
+@media (pointer: coarse) {
+  .sm, .md { min-height: 44px; }
+  .iconOnly.sm, .iconOnly.md { min-width: 44px; }
+}
+
+.primary { background: var(--plum); color: #fff; box-shadow: var(--sh-plum); }
+.primary:hover:not(:disabled) { background: var(--plum2); }
+
+.secondary { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line2); }
+.secondary:hover:not(:disabled) { background: var(--sunk); }
+
+.soft { background: var(--sunk); color: var(--ink); }
+.soft:hover:not(:disabled) { background: var(--line); }
+
+.ghost { background: transparent; color: var(--ink2); }
+.ghost:hover:not(:disabled) { background: var(--sunk); }
+.ghost:disabled { background: transparent; }
+
+.danger { background: var(--surface); color: var(--err); box-shadow: inset 0 0 0 1px var(--line2); }
+.danger:hover:not(:disabled) { background: var(--err-bg); }
+
+/* Stage: primary putih, default --stage3 (05 §5) */
+:global([data-theme="stage"]) .primary { background: #fff; color: var(--stage); box-shadow: none; }
+:global([data-theme="stage"]) .primary:hover:not(:disabled) { background: #ece8f2; }
+:global([data-theme="stage"]) .secondary { background: var(--stage3); color: #fff; box-shadow: none; }
+:global([data-theme="stage"]) .secondary:hover:not(:disabled) { background: #36303b; }
+:global([data-theme="stage"]) .soft { background: var(--stage3); color: #fff; }
+:global([data-theme="stage"]) .ghost { color: rgba(255, 255, 255, 0.82); }
+:global([data-theme="stage"]) .ghost:hover:not(:disabled) { background: var(--stage3); }
+:global([data-theme="stage"]) .danger { background: var(--stage3); color: #ff9a97; box-shadow: none; }
+:global([data-theme="stage"]) .btn:disabled { background: var(--stage3); color: rgba(255, 255, 255, 0.34); }

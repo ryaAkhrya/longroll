@@ -1,0 +1,33 @@
+.desktop, .mobile {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-top: var(--safe-top);
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+.desktop { height: calc(60px + var(--safe-top)); padding-left: 20px; padding-right: 20px; }
+.mobile { height: calc(52px + var(--safe-top)); padding-left: var(--page-pad); padding-right: var(--page-pad); }
+:global([data-theme="stage"]) .desktop, :global([data-theme="stage"]) .mobile { background: var(--stage); box-shadow: 0 1px 0 var(--sline); }
+
+.left, .right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.divider { width: 1px; height: 22px; background: var(--line2); }
+
+.codePill {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 12px; border: 0; border-radius: var(--r-sm);
+  background: var(--sunk); color: var(--ink2); font-size: 13px;
+}
+.codePill:hover { background: var(--line); }
+.codeLabel { color: var(--mute-text); }
+.codeValue { font-weight: 800; letter-spacing: 0.08em; color: var(--ink); }
+.mobileCode .codeLabel { display: none; }
+.mobileCode { height: 36px; }
+@media (pointer: coarse) { .codePill { min-height: 44px; } }
+
+/* Desktop ≥ 1024, mobile + tablet < 1024 (06 §2). Elemen tersembunyi tidak masuk accessibility tree. */
+.mobile { display: flex; }
+.desktop { display: none; }
+@media (min-width: 1024px) {
+  .desktop { display: flex; }
+  .mobile { display: none; }
+}

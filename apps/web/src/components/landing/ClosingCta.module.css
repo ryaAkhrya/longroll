@@ -1,0 +1,25 @@
+.stage { background: var(--stage); color: #fff; border-radius: 28px 28px 0 0; padding: 40px 0 calc(28px + var(--safe-bottom)); }
+.cta { display: flex; flex-direction: column; gap: 24px; }
+.title { font-size: clamp(36px, 10.4vw, 44px); line-height: 0.95; color: #fff; }
+.title :global(.s) { font-size: 1.04em; color: #c9b9f5; letter-spacing: 0; }
+.buttons { display: flex; flex-direction: column; gap: 10px; }
+.create { width: 100%; }
+.join { display: none; }
+
+.facts { display: flex; flex-direction: column; gap: 12px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--sline); font-size: 13px; color: rgba(255, 255, 255, 0.78); }
+.facts li { display: flex; align-items: center; gap: 10px; }
+.facts svg { flex: none; color: rgba(255, 255, 255, 0.62); }
+.footer { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; }
+.footer small { font-size: 12px; color: rgba(255, 255, 255, 0.62); }
+
+@media (min-width: 1024px) {
+  .stage { padding: 80px 0 40px; }
+  .cta { flex-direction: row; align-items: center; justify-content: space-between; gap: 48px; }
+  .title { max-width: 560px; font-size: clamp(48px, 4.6vw, 58px); }
+  .buttons { flex-direction: row; flex: none; gap: 10px; }
+  .create { width: auto; }
+  .join { display: inline-flex; }
+  .buttons :is(.create, .join) { height: 48px; font-size: 15px; }
+  .facts { flex-direction: row; gap: 40px; margin-top: 56px; }
+  .footer { margin-top: 48px; }
+}
