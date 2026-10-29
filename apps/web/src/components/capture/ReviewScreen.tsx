@@ -127,7 +127,7 @@ export function ReviewScreen({ cap, code, capture, shot, participants, meId, clo
             </Button>
           </div>
         )}
-        <p className={styles.caption}>Gak ada batas waktu. Temen-temen lihat kalau kamu ngulang.</p>
+        <p className={styles.caption}>Tidak ada batas waktu. Peserta lain melihat kalau kamu mengulang.</p>
       </div>
 
       <div className={styles.others} aria-label="Yang lain">

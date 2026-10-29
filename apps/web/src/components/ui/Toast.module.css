@@ -1,6 +1,7 @@
 .region {
   position: fixed; z-index: 100;
-  top: calc(var(--safe-top) + 12px);
+  /* Di bawah header room (52 px) supaya notifikasi tidak menutupi kode room dan menu. */
+  top: calc(var(--safe-top) + var(--header-h) + 8px);
   left: max(var(--page-pad), var(--safe-left));
   right: max(var(--page-pad), var(--safe-right));
   display: flex; flex-direction: column; align-items: center; gap: 8px;

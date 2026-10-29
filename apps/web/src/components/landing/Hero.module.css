@@ -1,44 +1,25 @@
 .hero { padding: 8px 0 40px; overflow-x: clip; }
-.inner { display: flex; flex-direction: column; }
+.inner { display: flex; flex-direction: column; gap: 32px; }
 .copy { display: flex; flex-direction: column; align-items: flex-start; }
 
-.info { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 12.5px; font-weight: 500; color: var(--ink2); }
-.dots { display: inline-flex; gap: 5px; }
-.dots span { width: 8px; height: 8px; border-radius: 50%; }
-
-.title { font-size: clamp(46px, 14.6vw, 60px); line-height: 0.92; color: var(--ink); }
+.title { font-size: clamp(44px, 13.6vw, 62px); line-height: 0.92; color: var(--ink); }
 .title :global(.s) { color: var(--plum); font-size: 1.04em; letter-spacing: -0.01em; }
 
-.lead { max-width: 440px; font-size: 15px; line-height: 1.5; color: var(--ink2); }
+.lead { max-width: 440px; margin-top: 14px; font-size: 15px; line-height: 1.55; color: var(--ink2); }
 
-.actions { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.actions { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 22px; }
 .create { width: 100%; }
-.note { font-size: 12.5px; line-height: 1.5; color: var(--mute-text); text-align: center; align-self: center; max-width: 320px; }
+.note { max-width: 380px; margin-top: 14px; font-size: 12.5px; line-height: 1.5; color: var(--mute-text); }
 .visual { padding-right: 8px; }
 
-/* Mobile urutan: judul → deskripsi → visual → CTA (03_Mobile/01_Landing) */
-.copy { display: contents; }
-.info { order: 1; margin-bottom: 14px; }
-.title { order: 2; }
-.lead { order: 3; margin-top: 14px; }
-.visual { order: 4; margin-top: 28px; }
-.actions { order: 5; margin-top: 20px; }
-.note { order: 6; margin-top: 14px; }
-
 @media (min-width: 1024px) {
-  .hero { padding: 24px 0 96px; }
-  .inner { display: grid; grid-template-columns: minmax(0, 470px) minmax(0, 1fr); align-items: center; gap: 56px; }
-  .visual { margin-top: 0; }
-  .copy { display: flex; align-items: flex-start; }
-  .info, .title, .lead, .visual, .actions, .note { order: 0; }
-  .info { margin-bottom: 20px; }
-  .title { font-size: clamp(72px, 7.2vw, 92px); line-height: 0.86; }
-  .lead { margin-top: 24px; font-size: 16.5px; line-height: 1.6; }
-  .actions { flex-direction: row; align-items: flex-start; width: auto; margin-top: 32px; gap: 10px; }
-  .create { width: auto; }
+  .hero { padding: 16px 0 72px; }
+  .inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, clamp(420px, 40vw, 520px)); align-items: center; gap: clamp(40px, 5vw, 64px); }
+  .title { font-size: clamp(64px, 6.4vw, 92px); line-height: 0.88; }
+  .lead { margin-top: 22px; font-size: 16.5px; line-height: 1.6; }
+  .actions { flex-direction: row; flex-wrap: wrap; align-items: flex-start; width: auto; margin-top: 30px; gap: 10px; }
+  .create { width: auto; flex: none; }
   .join { width: 232px; }
-  .note { margin-top: 22px; text-align: left; align-self: flex-start; max-width: none; }
-  .visual { padding: 0 40px 64px 0; }
+  .note { margin-top: 20px; }
+  .visual { padding: 0 34px 56px 0; }
 }
-.hideMobile { display: none; }
-@media (min-width: 600px) { .hideMobile { display: inline; } }

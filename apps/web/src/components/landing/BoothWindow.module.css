@@ -5,7 +5,7 @@
   box-shadow: var(--sh3);
 }
 .bar { display: none; }
-.grid { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; aspect-ratio: 1 / 0.9; }
+.grid { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; aspect-ratio: 1 / 0.74; }
 .tile { position: relative; border-radius: 18px; overflow: hidden; }
 .self { box-shadow: 0 0 0 2px var(--stage), 0 0 0 3.5px var(--p1-mid); }
 .name {
@@ -23,10 +23,10 @@
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   color: #fff; font-size: 38px; line-height: 1;
 }
-.strip { position: absolute; right: -10px; bottom: -34px; width: 34%; transform: rotate(3.5deg); }
+.strip { position: absolute; right: -8px; bottom: -40px; width: 25%; transform: rotate(3.5deg); }
 
 /* Mobile: strip menjorok di kanan bawah (03_Mobile/01_Landing) */
-.wrap { padding-bottom: 20px; }
+.wrap { padding-bottom: 28px; }
 
 @media (min-width: 1024px) {
   .window { padding: 14px 14px 14px; background: #faf8f4; border-radius: 28px; box-shadow: var(--sh3), inset 0 0 0 1px var(--line); }
@@ -38,6 +38,6 @@
   .tile { border-radius: 18px; }
   .self { box-shadow: 0 0 0 1.5px var(--ink); }
   .count { width: 80px; height: 80px; font-size: 52px; }
-  .strip { right: -34px; bottom: -64px; width: 32%; transform: rotate(4deg); }
+  .strip { right: -26px; bottom: -56px; width: 21%; transform: rotate(4deg); }
   .wrap { padding-bottom: 0; }
 }

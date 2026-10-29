@@ -18,15 +18,10 @@ export function FrameShowcase() {
     <section id="frame" className={styles.section} aria-labelledby="frame-title">
       <Container>
         <div className={styles.head}>
-          <div>
-            <p className="cap">Frame</p>
-            <h2 id="frame-title" className={`dc ${styles.title}`}>
-              Satu sesi, <span className="s">banyak gaya.</span>
-            </h2>
-          </div>
-          <p className={styles.blurb}>
-            Dari strip ala booth Seoul sampai scrapbook. Ganti frame kapan aja, semua orang langsung lihat. Bisa juga upload frame sendiri.
-          </p>
+          <h2 id="frame-title" className={`dc ${styles.title}`}>
+            Pilihan frame
+          </h2>
+          <p className={styles.blurb}>Ganti frame kapan saja, semua peserta langsung melihatnya. Frame buatan sendiri juga bisa diunggah.</p>
         </div>
       </Container>
       <div className={styles.scroller} role="region" aria-label="Contoh gaya frame" tabIndex={0}>
@@ -42,9 +37,6 @@ export function FrameShowcase() {
           ))}
         </ul>
       </div>
-      <Container>
-        <p className={styles.hint}>Geser buat lihat Editorial, Mosaic, dan frame buatanmu sendiri →</p>
-      </Container>
     </section>
   );
 }

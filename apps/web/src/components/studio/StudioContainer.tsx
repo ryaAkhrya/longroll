@@ -319,7 +319,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
 
   const topOverlay = (
     <>
-      <span className={styles.pill}>{room.code}</span>
+      {/* Kode room sudah ada di header mobile (tombol salin); tidak diulang di overlay. */}
       <span className={styles.pill}>
         {MODE_INFO[session.mode!].short} · {Math.min(cap.doneCount + 1, cap.shotCount)}/{studio.layout.shotCount}
         <span className={styles.progress} aria-hidden="true">
@@ -351,7 +351,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
         onPress: () => void cap.arm(false),
         label: `Ambil foto, hitung mundur ${studio.countdownSec} detik`,
       }}
-      caption={cap.shot?.state === "REVIEW" && !inReview ? `Shot ${cap.shot.index + 1} lagi direview temen-temenmu…` : "Siapa aja boleh cekrek"}
+      caption={cap.shot?.state === "REVIEW" && !inReview ? `Shot ${cap.shot.index + 1} sedang ditinjau peserta lain…` : "Siapa saja boleh mengambil foto"}
       barExtra={
         <Button variant="secondary" size="md" aria-pressed={cap.waiting} onClick={() => cap.setWaiting(!cap.waiting)} data-testid="wait-toggle">
           {cap.waiting ? "Siap!" : "Bentar"}
@@ -362,7 +362,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
           {cap.shot?.state === "COUNTDOWN" && (
             <CountdownOverlay
               shot={cap.shot}
-              initiatorName={cap.shot.armedBy === meId ? "kamu" : (room.participants.find((p) => p.participantId === cap.shot!.armedBy)?.displayName ?? "temen")}
+              initiatorName={cap.shot.armedBy === meId ? "kamu" : (room.participants.find((p) => p.participantId === cap.shot!.armedBy)?.displayName ?? "teman")}
               shotCount={cap.shotCount}
               clockOffsetMs={clockOffsetMs}
               onHold={() => void cap.hold()}

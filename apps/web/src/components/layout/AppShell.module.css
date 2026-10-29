@@ -5,6 +5,10 @@
   padding-left: var(--safe-left); padding-right: var(--safe-right);
 }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+/* Workspace studio (tema stage): tinggi tepat satu layar, area kerja mengisi sisa di bawah header; konten yang lebih tinggi
+   dari layar (viewport sangat pendek / zoom aksesibilitas) tetap bisa digulir, tidak terpotong. */
+.shell[data-theme="stage"] { height: 100dvh; }
+.shell[data-theme="stage"] .main { min-height: 0; }
 .skip {
   position: absolute; left: 12px; top: -64px; z-index: 200;
   padding: 10px 14px; border-radius: var(--r-sm);

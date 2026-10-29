@@ -28,8 +28,12 @@
 .caption { margin: 0; text-align: center; font-size: 12.5px; color: rgba(255, 255, 255, 0.6); }
 
 .others { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.othersHead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; color: rgba(255, 255, 255, 0.6); font-size: 12px; }
-.hint { text-align: right; }
+.othersHead { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: rgba(255, 255, 255, 0.6); font-size: 12px; }
+.hint { text-align: left; }
+@media (min-width: 560px) {
+  .othersHead { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .hint { text-align: right; }
+}
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 16px; background: var(--stage2); min-width: 0; }
 .cardRetake { grid-column: 1 / -1; }

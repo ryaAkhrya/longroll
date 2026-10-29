@@ -133,10 +133,13 @@ export function StudioScreen(props: StudioScreenProps) {
         </aside>
       )}
 
+      {/* Bar bawah: area grid (lihat StudioScreen.module.css). Mobile = baris status (Shot · Bentar · Siap) di atas baris aksi
+          (Timer · shutter · Alat); desktop = satu baris. `display: contents` pada barCenter/barRight membuat anaknya
+          menjadi sel grid footer di mobile tanpa mengubah urutan baca. */}
       <footer className={styles.bar}>
         <div className={styles.barLeft}>{props.timer}</div>
         <div className={styles.barCenter}>
-          <span className={styles.stat}>
+          <span className={cx(styles.stat, styles.statShot)}>
             <small>Shot</small>
             <strong className="dc tnum">{props.shotLabel ?? "1/1"}</strong>
           </span>
@@ -150,7 +153,7 @@ export function StudioScreen(props: StudioScreenProps) {
           >
             <Camera size={24} {...iconProps} />
           </button>
-          <span className={styles.stat}>
+          <span className={cx(styles.stat, styles.statReady)}>
             <small>Siap</small>
             <strong className="dc tnum" data-testid="ready-count">
               {props.readyText ?? `${ready}/${count}`}
@@ -158,8 +161,8 @@ export function StudioScreen(props: StudioScreenProps) {
           </span>
         </div>
         <div className={styles.barRight}>
-          {props.barExtra}
-          <p className={styles.caption}>{props.caption ?? "Siapa aja boleh cekrek"}</p>
+          {props.barExtra && <span className={styles.wait}>{props.barExtra}</span>}
+          <p className={styles.caption}>{props.caption ?? "Siapa saja boleh mengambil foto"}</p>
           {props.dockRight && <span className={styles.dockRight}>{props.dockRight}</span>}
         </div>
       </footer>

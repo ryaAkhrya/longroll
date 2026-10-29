@@ -1,4 +1,6 @@
-.strip {
+/* :where() = spesifisitas nol: override konsumen (.strip di BoothWindow/CreateRoomForm/RoomClosed: position, width, transform)
+   selalu menang. Tanpa ini hasilnya bergantung urutan chunk CSS di build produksi (strip membengkak di hero desktop). */
+:where(.strip) {
   position: relative; display: flex; flex-direction: column; gap: 3.5%;
   width: 100%; padding: 6% 6% 4%;
   background: #fff; border-radius: 4px;

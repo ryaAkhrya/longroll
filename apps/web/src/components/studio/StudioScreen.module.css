@@ -1,5 +1,5 @@
 .studio {
-  flex: 1; display: grid; min-height: 0;
+  flex: 1; display: grid; min-height: 460px;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "center" "bar";
@@ -9,7 +9,7 @@
 .center { grid-area: center; min-height: 0; display: flex; position: relative; }
 .side, .drawer { display: none; }
 .gridWrap { position: relative; flex: 1; display: flex; min-height: 0; }
-.grid { flex: 1; display: grid; gap: 3px; min-height: calc(100dvh - 52px - 150px); }
+.grid { flex: 1; display: grid; gap: 3px; min-height: 0; }
 .n1 { grid-template-columns: 1fr; }
 .n2 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 .n3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
@@ -30,30 +30,48 @@
 .summary dd { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .link { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #fff; font-weight: 700; font-size: 13.5px; padding: 6px 0; cursor: pointer; }
 
+/* Bar bawah (mobile): baris status (Shot · Bentar · Siap) di atas baris aksi (Timer · shutter · Alat).
+   Hierarki: shutter di tengah dan terbesar; kontrol sekunder di kiri/kanan; status berupa teks kecil, bukan tombol. */
 .bar {
-  grid-area: bar; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  min-height: 150px; padding: 12px var(--page-pad) max(28px, calc(var(--safe-bottom) + 12px));
+  grid-area: bar; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "shot wait ready" "timer shutter tools";
+  align-items: center; gap: 8px 12px;
+  padding: 10px max(var(--page-pad), var(--safe-left)) max(14px, calc(var(--safe-bottom) + 8px));
   background: var(--stage);
 }
-.barLeft, .barRight { flex: 1; min-width: 0; display: flex; align-items: center; }
-.barRight { justify-content: flex-end; }
+.barLeft { grid-area: timer; justify-self: start; display: flex; min-width: 0; }
+.barCenter, .barRight { display: contents; }
+.statShot { grid-area: shot; justify-self: start; }
+.statReady { grid-area: ready; justify-self: end; }
+.shutter { grid-area: shutter; }
+.wait { grid-area: wait; justify-self: center; }
+.dockRight { grid-area: tools; justify-self: end; display: flex; }
 .caption { display: none; margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.6); text-align: right; }
-.barCenter { display: flex; align-items: center; gap: 18px; }
-.stat { display: flex; flex-direction: column; align-items: center; line-height: 1; }
-.stat small { font-size: 11px; color: rgba(255, 255, 255, 0.55); margin-bottom: 4px; }
-.stat strong { font-size: 22px; }
+.stat { display: inline-flex; align-items: baseline; gap: 6px; line-height: 1; white-space: nowrap; }
+.stat small { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.stat strong { font-size: 18px; }
 .shutter {
   display: grid; place-items: center; width: 76px; height: 76px; border-radius: 50%; border: 0;
   background: #fff; color: var(--stage); box-shadow: inset 0 0 0 3px var(--stage), 0 0 0 3px rgba(255, 255, 255, 0.4);
 }
 .shutter:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* Landscape HP: dock pindah ke kanan (DEC-058). */
+/* Landscape HP: dock pindah ke kanan (DEC-058), dua kolom supaya muat di tinggi 320–400 px. */
 @media (max-width: 1023px) and (orientation: landscape) {
-  .studio { grid-template-columns: minmax(0, 1fr) 120px; grid-template-rows: minmax(0, 1fr); grid-template-areas: "center bar"; }
-  .bar { flex-direction: column; min-height: 0; padding: 12px 8px max(12px, var(--safe-bottom)); }
-  .barCenter { flex-direction: column; gap: 10px; }
-  .grid { min-height: calc(100dvh - 52px); }
+  .studio { grid-template-columns: minmax(0, 1fr) 176px; grid-template-rows: minmax(0, 1fr); grid-template-areas: "center bar"; min-height: 0; }
+  .bar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "shot ready" "shutter shutter" "timer tools" "wait wait";
+    justify-items: center; align-content: center; gap: 8px;
+    padding: 8px max(10px, var(--safe-right)) max(8px, var(--safe-bottom)) 10px;
+  }
+  .statShot { justify-self: start; }
+  .statReady { justify-self: end; }
+  .barLeft { justify-self: start; }
+  .dockRight { justify-self: end; }
+  .wait { justify-self: stretch; }
+  .wait > * { width: 100%; }
 }
 
 @media (min-width: 1024px) {
@@ -61,7 +79,7 @@
     grid-template-columns: auto minmax(0, 1fr) 250px;
     grid-template-rows: minmax(0, 1fr) 92px;
     grid-template-areas: "rail center side" "bar bar bar";
-    gap: 0 12px; padding: 12px 20px 0;
+    gap: 0 12px; padding: 12px 20px 0; min-height: 520px;
   }
   .withDrawer { grid-template-columns: auto minmax(0, 1fr) 400px; }
   .rail { grid-area: rail; display: flex; flex-direction: column; gap: 6px; width: 64px; }
@@ -73,8 +91,14 @@
   .grid { gap: 8px; min-height: 0; }
   .n2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
   .topOverlay { display: none; }
-  .bar { min-height: 0; padding: 0; }
-  .caption { display: block; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0; }
+  .barLeft { flex: 1; }
+  .barCenter { display: flex; align-items: center; gap: 18px; }
+  .barRight { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: flex-end; gap: 14px; }
+  .stat { flex-direction: column; align-items: center; gap: 0; }
+  .stat small { margin-bottom: 4px; font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+  .stat strong { font-size: 22px; }
+  .caption { display: block; max-width: 20ch; line-height: 1.35; }
   .dockRight { display: none; }
   .shutter { width: 70px; height: 70px; }
 }

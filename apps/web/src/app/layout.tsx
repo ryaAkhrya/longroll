@@ -7,7 +7,7 @@ import "@/styles/globals.css";
 export const metadata: Metadata = {
   title: { default: "LONGROLL — Photobooth bareng, dari mana aja", template: "%s · LONGROLL" },
   description:
-    "Photobooth online buat sampai 4 orang. Satu room, empat kamera, tanpa akun dan tanpa host. Room sementara: foto dan datanya dihapus setelah room kedaluwarsa.",
+    "Photobooth online untuk sampai 4 orang. Masuk ke satu room, ambil foto serentak, lalu hias hasilnya bersama. Tanpa akun. Room bersifat sementara: foto dan datanya dihapus setelah room kedaluwarsa.",
 };
 
 export const viewport: Viewport = {

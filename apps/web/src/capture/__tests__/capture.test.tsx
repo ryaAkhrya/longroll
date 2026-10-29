@@ -163,7 +163,7 @@ describe("ReviewScreen (SCR-14/15): tanpa auto-accept", () => {
     const cap = controller({ shot, mine: shot.perParticipant.a!, required: [me, bimo, raka] });
     const { container } = view(cap, shot, capture);
     expect(screen.getByRole("heading", { name: /Pakai ini atau ulang\?/ })).toBeInTheDocument();
-    expect(screen.getByText("Gak ada batas waktu. Temen-temen lihat kalau kamu ngulang.")).toBeInTheDocument();
+    expect(screen.getByText("Tidak ada batas waktu. Peserta lain melihat kalau kamu mengulang.")).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/otomatis|auto|diem|detik lagi|progress/i);
     expect(container.querySelector('[role="progressbar"], progress')).toBeNull();
     expect(cap.accept).not.toHaveBeenCalled(); // tidak ada penerimaan tanpa aksi

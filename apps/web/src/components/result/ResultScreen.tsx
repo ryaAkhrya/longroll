@@ -91,14 +91,14 @@ export function ResultScreen({ client, room, session, meId, closed = false, onGa
           <ExportPanel exp={exp} />
           <div className={styles.nav}>
             {!closed && (
-              <Button variant="secondary" size="md" icon={<Pencil size={16} {...iconProps} />} onClick={() => void reopen()}>
+              <Button variant="secondary" size="sm" icon={<Pencil size={16} {...iconProps} />} onClick={() => void reopen()}>
                 Balik edit
               </Button>
             )}
-            <Button variant="secondary" size="md" icon={<Images size={16} {...iconProps} />} onClick={onGallery}>
+            <Button variant="secondary" size="sm" icon={<Images size={16} {...iconProps} />} onClick={onGallery}>
               Ke galeri
             </Button>
-            <Button variant="soft" size="md" icon={<Plus size={16} {...iconProps} />} onClick={onNewSession}>
+            <Button variant="soft" size="sm" icon={<Plus size={16} {...iconProps} />} onClick={onNewSession}>
               Sesi baru
             </Button>
           </div>
