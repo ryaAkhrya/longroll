@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
+import { checkRealtimeUrl } from "./src/security/deploy-check";
 
 const isProd = process.env.NODE_ENV === "production";
+
+// Hanya saat build produksi: URL realtime placeholder/lokal/http. Di Vercel production menggagalkan build.
+if (isProd) {
+  const check = checkRealtimeUrl(process.env);
+  if (check.level === "error") throw new Error(`[deploy-check] ${check.message}`);
+  if (check.level === "warn") console.warn(`[deploy-check] ${check.message}`);
+}
 
 /**
  * Header statis (15 §6). Content-Security-Policy TIDAK diatur di sini: CSP final memakai nonce per-request

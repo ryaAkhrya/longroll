@@ -1,7 +1,7 @@
 # LONGROLL
 
 Photobooth online multiplayer (maks. 4 orang). Dokumentasi produk: [docs/00_README.md](docs/00_README.md).
-Status: **P10-A — QA akhir & regresi browser** (Chromium desktop+mobile, Firefox, WebKit; build produksi). Alur 4 peserta P02→P08 lulus di Chromium/Firefox; perangkat nyata, TURN, OAuth Google, dan S3 nyata belum. Rincian: [HANDOFF_P10.md](HANDOFF_P10.md). Handoff: [HANDOFF_P02.md](HANDOFF_P02.md), [HANDOFF_P02_NEON.md](HANDOFF_P02_NEON.md), [HANDOFF_P03.md](HANDOFF_P03.md), [HANDOFF_P04.md](HANDOFF_P04.md), [HANDOFF_P05.md](HANDOFF_P05.md), [HANDOFF_P06.md](HANDOFF_P06.md), [HANDOFF_P07.md](HANDOFF_P07.md), [HANDOFF_P08.md](HANDOFF_P08.md), [HANDOFF_P09.md](HANDOFF_P09.md) (runbook: [ops/RUNBOOK.md](ops/RUNBOOK.md)). Migrasi Neon `development`: 0001–0007.
+Status: **P10-A — QA akhir & regresi browser** (Chromium desktop+mobile, Firefox, WebKit; build produksi). Alur 4 peserta P02→P08 lulus di Chromium/Firefox; perangkat nyata, TURN, OAuth Google, dan S3 nyata belum. Rincian: [HANDOFF_P10.md](HANDOFF_P10.md). **Kesiapan online & deployment:** [HANDOFF_ONLINE_READINESS.md](HANDOFF_ONLINE_READINESS.md), [infra/deployment/](infra/deployment/) (Vercel, realtime hosting, domain/cookie, checklist, `smoke.mjs`) — aplikasi publik belum berfungsi sampai domain kustom + service realtime tersedia. Handoff: [HANDOFF_P02.md](HANDOFF_P02.md), [HANDOFF_P02_NEON.md](HANDOFF_P02_NEON.md), [HANDOFF_P03.md](HANDOFF_P03.md), [HANDOFF_P04.md](HANDOFF_P04.md), [HANDOFF_P05.md](HANDOFF_P05.md), [HANDOFF_P06.md](HANDOFF_P06.md), [HANDOFF_P07.md](HANDOFF_P07.md), [HANDOFF_P08.md](HANDOFF_P08.md), [HANDOFF_P09.md](HANDOFF_P09.md) (runbook: [ops/RUNBOOK.md](ops/RUNBOOK.md)). Migrasi Neon `development`: 0001–0007.
 
 ## Struktur
 

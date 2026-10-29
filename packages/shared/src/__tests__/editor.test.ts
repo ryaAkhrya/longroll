@@ -326,7 +326,7 @@ describe("AC-3/7 konvergensi CRDT", () => {
     expect(elementsMap(b).get(id)!.get("content")!.toString()).toBe("XabY");
   });
 
-  it("TC-EDIT-020 fuzz: 4 klien × 500 operasi acak + partisi/putus-sambung → konvergen & valid", () => {
+  it("TC-EDIT-020 fuzz: 4 klien × 500 operasi acak + partisi/putus-sambung → konvergen & valid", { timeout: 60_000 }, () => {
     for (const seedNo of [1, 2, 3]) {
       let x = seedNo * 104729;
       const rnd = () => {

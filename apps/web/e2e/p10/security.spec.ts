@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import http from "node:http";
-import { collectCsp, createRoom, openPerson } from "./kit";
+import { collectCsp, createRoom, fakeIp, openPerson } from "./kit";
 
 /**
  * P10-A — regresi keamanan P09 DI BROWSER/HTTP NYATA terhadap build produksi: CSP nonce, header, injeksi skrip/eval,
@@ -103,7 +103,7 @@ test("XSS lewat nama panggilan: ditolak di UI dan API; tidak ada yang dieksekusi
   expect(await p.page.locator('img[src="x"]').count()).toBe(0);
   await p.ctx.close();
   // Server tidak mempercayai validasi klien.
-  const res = await request.post(`${API}/api/rooms`, { headers: { Origin: WEB, "Content-Type": "application/json" }, data: { displayName: '<img src=x onerror="alert(1)">' } });
+  const res = await request.post(`${API}/api/rooms`, { headers: { Origin: WEB, "Content-Type": "application/json", "X-Forwarded-For": fakeIp() }, data: { displayName: '<img src=x onerror="alert(1)">' } });
   expect(res.status()).toBe(400);
 });
 
@@ -172,7 +172,7 @@ test.describe("API: Origin/CORS/otorisasi/enumerasi", () => {
         const req = http.request({
           host: "localhost",
           port: 4000,
-          path: "/ws?room=ABCDEF&v=1",
+          path: "/ws?code=ABCDEF&v=1",
           headers: { Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==", Origin: origin },
         });
         req.on("upgrade", (_res, socket) => {
@@ -192,6 +192,50 @@ test.describe("API: Origin/CORS/otorisasi/enumerasi", () => {
       });
     expect([401, 403, 404, 429]).toContain(await attempt("https://evil.example"));
     expect([401, 403, 404, 429]).toContain(await attempt(WEB));
+  });
+
+  test("Set-Cookie kredensial: HttpOnly; SameSite=Strict; Path=/; Max-Age; host-only (+Secure di produksi)", async ({ request }) => {
+    const res = await request.post(`${API}/api/rooms`, { headers: { Origin: WEB, "Content-Type": "application/json", "X-Forwarded-For": fakeIp() }, data: { displayName: "Cookie" } });
+    expect(res.status()).toBe(201);
+    const sc = res.headersArray().filter((h) => h.name.toLowerCase() === "set-cookie").map((h) => h.value);
+    expect(sc.length).toBe(1);
+    expect(sc[0]).toMatch(/HttpOnly/);
+    expect(sc[0]).toMatch(/SameSite=Strict/);
+    expect(sc[0]).toMatch(/Path=\//);
+    expect(sc[0]).toMatch(/Max-Age=\d+/);
+    expect(sc[0], "tanpa atribut Domain (host-only)").not.toMatch(/;\s*Domain=/i);
+    if (process.env.P10_WEBKIT !== "1") expect(sc[0]).toMatch(/;\s*Secure/);
+    const tokenValue = sc[0]!.split("=")[1]!.split(";")[0]!;
+    expect(await res.text(), "token tidak boleh ada di body respons").not.toContain(tokenValue);
+  });
+
+  test("IDOR: kredensial room A tidak membuka apa pun di room B (sesi, URL foto, frame, leave tidak mencabut orang lain)", async ({ playwright }) => {
+    const mk = async () => {
+      const ctx = await playwright.request.newContext({ extraHTTPHeaders: { Origin: WEB, "X-Forwarded-For": fakeIp() } });
+      const r = await ctx.post(`${API}/api/rooms`, { data: { displayName: "Uji" } });
+      expect(r.status()).toBe(201);
+      return { ctx, body: (await r.json()) as { roomCode: string; participantId: string } };
+    };
+    const a = await mk();
+    const b = await mk();
+    const fakeAttempt = "00000000-0000-4000-8000-000000000000";
+    // Cookie A dikirim ke room B (cookie per-room dipisah nama; konteks A tidak punya cookie B).
+    for (const path of [`/api/rooms/${b.body.roomCode}/session`, `/api/rooms/${b.body.roomCode}/turn-credentials`]) {
+      const r = await a.ctx.fetch(API + path, { method: path.endsWith("session") ? "POST" : "GET", data: {} });
+      expect([401, 403, 404], path).toContain(r.status());
+    }
+    const att = await a.ctx.post(`${API}/api/rooms/${b.body.roomCode}/attempts/${fakeAttempt}/url?part=full`, { data: {} });
+    expect([401, 403, 404]).toContain(att.status());
+    const frames = await a.ctx.post(`${API}/api/rooms/${b.body.roomCode}/frames`, { data: { fileName: "x.png", contentType: "image/png", bytes: 10 } });
+    expect([401, 403, 404]).toContain(frames.status());
+    // Mengirim ID peserta B sebagai milik A tidak memberi apa pun; leave dari A hanya memengaruhi room A.
+    const leaveA = await a.ctx.post(`${API}/api/rooms/${a.body.roomCode}/leave`, { data: {} });
+    expect(leaveA.status()).toBe(200);
+    const stillB = await b.ctx.post(`${API}/api/rooms/${b.body.roomCode}/session`, { data: {} });
+    expect(stillB.status(), "room B tetap utuh setelah A keluar").toBe(200);
+    await b.ctx.post(`${API}/api/rooms/${b.body.roomCode}/leave`, { data: {} });
+    await a.ctx.dispose();
+    await b.ctx.dispose();
   });
 
   test("health publik tidak membocorkan rahasia/DSN", async ({ request }) => {

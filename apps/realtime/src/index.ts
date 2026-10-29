@@ -1,5 +1,6 @@
 import { createRealtimeApp } from "./app";
 import { loadConfig } from "./config";
+import { checkProductionConfig } from "./deployCheck";
 import { evaluateAlarms } from "./guard/alarms";
 import { errText, log, metrics } from "./log";
 import { FsObjectStorage } from "./storage/fs";
@@ -13,6 +14,16 @@ import { PostgresRoomStore, REQUIRED_SCHEMA_VERSION } from "./store/postgres";
 import type { RoomStore } from "./store/types";
 
 const config = loadConfig();
+
+// Topologi/keamanan produksi diperiksa SEBELUM menerima trafik; tidak ada flag untuk melewatkannya (DEC-082).
+{
+  const check = checkProductionConfig(config);
+  for (const w of check.warnings) log.warn("config.warning", { message: w });
+  if (check.errors.length) {
+    for (const e of check.errors) log.error("config.invalid", { message: e });
+    process.exit(1);
+  }
+}
 
 function pickStore(): RoomStore {
   if (config.databaseUrl) return new PostgresRoomStore(createPgDb(config.databaseUrl, config.database));
@@ -88,7 +99,7 @@ async function start() {
     }, config.metricsIntervalMs);
     metricsTimer.unref?.();
   }
-  app.server.listen(config.port, () => {
+  const onListening = () => {
     log.info("server.listening", {
       port: config.port,
       store: store.kind,
@@ -97,7 +108,9 @@ async function start() {
       holdSeconds: config.room.holdSeconds,
       maxLifetimeHours: config.room.maxLifetimeHours,
     });
-  });
+  };
+  if (config.host) app.server.listen(config.port, config.host, onListening);
+  else app.server.listen(config.port, onListening);
 }
 
 let shuttingDown = false;

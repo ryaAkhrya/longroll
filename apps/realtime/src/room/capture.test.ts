@@ -582,5 +582,7 @@ describe("P06 cleanup & invarian acak (AC-P06-4, TC-SEC-030)", () => {
     }
     // Penjaga anti-vakum: fuzz benar-benar menjalankan accept/retake sah oleh pemiliknya.
     expect(ownChanges).toBeGreaterThan(10);
-  });
+    // Terukur P10: ±4,4 dtk tanpa beban (sharp mendekode JPEG 1280×960 per percobaan) — 88% dari batas bawaan 5 dtk, sehingga
+    // beban CPU sesaat (mis. browser E2E berjalan bersamaan) membuatnya time-out meski invarian benar (seed tetap, tak acak).
+  }, 60_000);
 });

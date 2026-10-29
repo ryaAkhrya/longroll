@@ -3,6 +3,8 @@ import { ROOM_DEFAULTS } from "@longroll/shared";
 
 export interface ServerConfig {
   port: number;
+  /** Alamat bind. Kosong = bawaan Node (dual-stack `::`, menerima IPv4 & IPv6 — cocok untuk Railway/Fly). */
+  host: string | null;
   isProduction: boolean;
   allowedOrigins: string[];
   /** URL WebSocket publik yang dikirim ke klien (tanpa query). */
@@ -92,6 +94,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const s3Endpoint = env.S3_ENDPOINT?.trim();
   return {
     port,
+    host: env.HOST?.trim() || null,
     isProduction,
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "http://localhost:3000")
       .split(",")

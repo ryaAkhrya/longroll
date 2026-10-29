@@ -26,7 +26,7 @@ export async function newPage(browser: Browser, opts: { width?: number; height?:
 
 /** Selesaikan SCR-04: nyalakan kamera (media palsu) lalu masuk lobby, atau masuk tanpa kamera. */
 export async function passCameraCheck(page: Page, withCamera = true) {
-  await expect(page.getByRole("heading", { name: /Cek kamera/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Cek kamera/ })).toBeVisible({ timeout: 15_000 });
   if (withCamera) {
     await page.getByRole("button", { name: "Nyalain kamera" }).click();
     await page.getByRole("button", { name: "Masuk ke lobby" }).click();

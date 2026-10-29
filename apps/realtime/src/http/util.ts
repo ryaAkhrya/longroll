@@ -61,10 +61,12 @@ export function isAllowedOrigin(config: ServerConfig, origin: string | undefined
 
 export function applyCors(config: ServerConfig, req: IncomingMessage, res: ServerResponse) {
   const origin = req.headers.origin;
+  // Vary: Origin SELALU (juga tanpa Origin / Origin asing): respons yang di-cache dari <img> (tanpa header Origin, tanpa ACAO)
+  // tidak boleh dipakai ulang untuk fetch CORS yang membawa Origin — itu menghasilkan "Failed to fetch" yang membingungkan.
+  res.setHeader("Vary", "Origin");
   if (isAllowedOrigin(config, origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Vary", "Origin");
   }
 }
 

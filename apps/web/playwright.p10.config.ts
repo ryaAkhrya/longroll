@@ -57,6 +57,8 @@ export default defineConfig({
       env: {
         PORT: "4000",
         ALLOWED_ORIGINS: "http://localhost:3000",
+        // Tiap peserta uji mengirim X-Forwarded-For unik (kit.ts) supaya batas buat-room 10/jam per IP (RATE_LIMITS.create) tidak habis oleh suite.
+        TRUST_PROXY: "1",
         ROOM_GRACE_PERIOD_SECONDS: "6",
         PARTICIPANT_HOLD_SECONDS: "4",
         RATE_LIMIT_SALT: `p10-${Date.now()}`,

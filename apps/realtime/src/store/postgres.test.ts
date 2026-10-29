@@ -78,41 +78,55 @@ function stateWithOne() {
 }
 
 describe("PostgresRoomStore (Db palsu)", () => {
-  it("room baru: INSERT room + peserta + event dalam SATU transaksi", async () => {
-    const db = new FakeDb((sql) => (sql.includes("INSERT INTO lr_rooms") ? ok([{ room_id: "x" }]) : ok()));
+  it("room baru: room + peserta + event + pangkas = SATU statement atomik (1 round-trip, tanpa BEGIN/COMMIT)", async () => {
+    const db = new FakeDb(() => ok([{ n: 1 }]));
     const store = new PostgresRoomStore(db, 500);
     await store.saveRoom({
       state: stateWithOne(),
       expectedRevision: 0,
-      changedParticipantIds: ["p1"],
+      changedParticipantIds: ["p1", "p1"], // duplikat diabaikan (ON CONFLICT tak boleh menyentuh baris yang sama dua kali)
       events: [{ type: "participant.joined", seq: 1, roomVersion: 1, atMs: 1_000, payload: {} }],
     });
-    expect(db.tx).toEqual({ begun: 1, committed: 1, rolledBack: 0 });
-    expect(db.log.every((q) => q.tx)).toBe(true);
-    expect(db.log.map((q) => q.sql.split(" ").slice(0, 3).join(" "))).toEqual([
-      "INSERT INTO lr_rooms",
-      "INSERT INTO lr_participants",
-      "INSERT INTO lr_room_events",
-      "DELETE FROM lr_room_events",
-    ]);
-    // Hash token dikirim, token mentah tidak pernah ada di state.
-    expect(db.log[1]!.params).toContain("a".repeat(64));
+    expect(db.tx).toEqual({ begun: 0, committed: 0, rolledBack: 0 });
+    expect(db.log).toHaveLength(1);
+    const q = db.log[0]!;
+    expect(q.sql).toMatch(/^WITH r AS \(INSERT INTO lr_rooms/);
+    for (const frag of ["p AS ( INSERT INTO lr_participants", "e AS ( INSERT INTO lr_room_events", "pr AS (DELETE FROM lr_room_events"]) expect(q.sql).toContain(frag);
+    // Semua CTE tulis digerbang oleh hasil CTE room (revisi cocok).
+    expect(q.sql.match(/WHERE EXISTS \(SELECT 1 FROM r\)/g)?.length).toBe(2);
+    expect(q.sql).toContain("AND EXISTS (SELECT 1 FROM r)");
+    // Hash token ada di JSON peserta (hanya 1 baris), token mentah tak pernah ada di state.
+    const participants = JSON.parse(String(q.params.find((x) => typeof x === "string" && x.includes("participant_id"))));
+    expect(participants).toHaveLength(1);
+    expect(participants[0].token_hash).toBe("a".repeat(64));
+    // Setiap placeholder $1..$n terpakai (parameter tak terpakai membuat PostgreSQL gagal infer tipe).
+    for (let i = 1; i <= q.params.length; i++) expect(q.sql).toContain(`$${i}`);
   });
 
-  it("revisi tidak cocok → StaleRevisionError dan transaksi di-rollback", async () => {
-    const db = new FakeDb((sql) => (sql.includes("UPDATE lr_rooms") ? ok([]) : ok()));
+  it("hanya CTE yang dibutuhkan ikut: tanpa peserta/event/sesi/frame hanya CTE room", async () => {
+    const db = new FakeDb(() => ok([{ n: 1 }]));
+    const store = new PostgresRoomStore(db, 500);
+    const state = stateWithOne();
+    state.revision = 2;
+    await store.saveRoom({ state, expectedRevision: 1, changedParticipantIds: [], events: [] });
+    const q = db.log[0]!;
+    expect(q.sql).toMatch(/^WITH r AS \(UPDATE lr_rooms/);
+    expect(q.sql).not.toMatch(/INSERT INTO|DELETE FROM/);
+    expect(q.params).toHaveLength(11);
+  });
+
+  it("revisi tidak cocok → StaleRevisionError (CTE room kosong = tidak ada yang tertulis)", async () => {
+    const db = new FakeDb(() => ok([{ n: 0 }]));
     const store = new PostgresRoomStore(db, 500);
     const state = stateWithOne();
     state.revision = 5;
-    await expect(store.saveRoom({ state, expectedRevision: 4, changedParticipantIds: [], events: [] })).rejects.toBeInstanceOf(
+    await expect(store.saveRoom({ state, expectedRevision: 4, changedParticipantIds: ["p1"], events: [] })).rejects.toBeInstanceOf(
       StaleRevisionError,
     );
-    expect(db.tx.rolledBack).toBe(1);
-    const update = db.log.find((q) => q.sql.startsWith("UPDATE lr_rooms"))!;
-    expect(update.sql).toContain("revision = $11");
-    expect(update.params.at(-1)).toBe(4);
-    // Setiap placeholder $1..$n dipakai di SQL (parameter tak terpakai membuat PostgreSQL gagal infer tipe).
-    for (let i = 1; i <= update.params.length; i++) expect(update.sql).toContain(`$${i}`);
+    const q = db.log[0]!;
+    expect(q.sql).toContain("revision = $11");
+    expect(q.params[10]).toBe(4);
+    for (let i = 1; i <= q.params.length; i++) expect(q.sql).toContain(`$${i}`);
   });
 
   it("error koneksi/driver dipetakan ke StoreUnavailableError", async () => {

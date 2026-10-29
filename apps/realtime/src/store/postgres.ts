@@ -160,168 +160,19 @@ export class PostgresRoomStore implements RoomStore {
     });
   }
 
+  /**
+   * Satu simpan = SATU statement SQL (CTE data-modifying), yaitu satu round-trip jaringan, bukan BEGIN + N statement + COMMIT.
+   * Atomisitas dijamin PostgreSQL untuk satu statement; optimistic concurrency tetap: CTE `r` (INSERT/UPDATE room
+   * `WHERE revision = expected`) menjadi gerbang semua CTE lain (`EXISTS (SELECT 1 FROM r)`), jadi revisi basi tidak menulis
+   * apa pun dan melempar StaleRevisionError. Pengukuran P10-A: transaksi 5 round-trip 102 ms vs 22 ms satu statement
+   * (RTT 20 ms ke Neon ap-southeast-1).
+   */
   saveRoom(input: SaveRoomInput) {
-    return this.run(() => this.db.transaction((tx) => this.saveInTx(tx, input)));
-  }
-
-  private async saveInTx(
-    tx: Queryable,
-    { state, expectedRevision, events, changedParticipantIds, changedSessionIds = [], changedFrameIds = [], deletedFrameIds = [] }: SaveRoomInput,
-  ) {
-    const values = [
-      state.roomId,
-      state.code,
-      state.status,
-      state.createdAtMs,
-      state.emptySinceMs,
-      state.expiresAtMs,
-      state.activeSessionId,
-      JSON.stringify(state.sessionOrder),
-      state.roomVersion,
-      state.lastSeq,
-      state.revision,
-    ];
-    const r =
-      expectedRevision === 0
-        ? await tx.query(
-            `INSERT INTO lr_rooms (room_id, code, status, created_at, empty_since, expires_at, active_session_id,
-                                   session_order, room_version, last_seq, revision, updated_at)
-             VALUES ($1, $2, $3, ${TS(4)}, ${TS(5)}, ${TS(6)}, $7, $8::jsonb, $9, $10, $11, now())
-             ON CONFLICT (room_id) DO NOTHING
-             RETURNING room_id`,
-            values,
-          )
-        : await tx.query(
-            `UPDATE lr_rooms
-                SET status = $3, empty_since = ${TS(4)}, expires_at = ${TS(5)}, active_session_id = $6,
-                    session_order = $7::jsonb, room_version = $8, last_seq = $9, revision = $10, updated_at = now()
-              WHERE room_id = $1 AND code = $2 AND revision = $11
-              RETURNING room_id`,
-            // Tanpa created_at: setiap parameter harus dipakai di SQL (tipe parameter tak terpakai tak bisa diinfer).
-            [...values.slice(0, 3), ...values.slice(4), expectedRevision],
-          );
-    if (r.rows.length !== 1) throw new StaleRevisionError(state.roomId);
-
-    for (const pid of changedParticipantIds) {
-      const p = state.participants[pid];
-      if (p) await this.upsertParticipant(tx, state.roomId, p);
-    }
-
-    for (const sid of changedSessionIds) {
-      const s = state.sessions[sid];
-      if (s) await this.upsertSession(tx, state.roomId, s);
-    }
-
-    for (const fid of changedFrameIds) {
-      const f = state.frames[fid];
-      if (f) await this.upsertFrame(tx, state.roomId, f);
-    }
-    if (deletedFrameIds.length) {
-      await tx.query("DELETE FROM lr_frames WHERE room_id = $1 AND frame_id = ANY($2::uuid[])", [state.roomId, deletedFrameIds]);
-    }
-
-    for (const e of events) {
-      await tx.query(
-        `INSERT INTO lr_room_events (room_id, seq, type, payload, room_version, at)
-         VALUES ($1, $2, $3, $4::jsonb, $5, ${TS(6)})
-         ON CONFLICT (room_id, seq) DO NOTHING`,
-        [state.roomId, e.seq, e.type, JSON.stringify(e.payload), e.roomVersion ?? state.roomVersion, e.atMs],
-      );
-    }
-    if (events.length) {
-      await tx.query("DELETE FROM lr_room_events WHERE room_id = $1 AND seq <= $2", [
-        state.roomId,
-        state.lastSeq - this.eventBufferSize,
-      ]);
-    }
-  }
-
-  private upsertSession(tx: Queryable, roomId: string, s: SessionView) {
-    return tx.query(
-      `INSERT INTO lr_sessions (session_id, room_id, idx, state, mode, created_at, created_by, locked_at, voting, studio, event_log, capture, result, updated_at)
-       VALUES ($1, $2, $3, $4, $5, ${TS(6)}, $7, ${TS(8)}, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, now())
-       ON CONFLICT (session_id) DO UPDATE
-         SET state = EXCLUDED.state, mode = COALESCE(lr_sessions.mode, EXCLUDED.mode), locked_at = EXCLUDED.locked_at,
-             voting = EXCLUDED.voting, studio = EXCLUDED.studio, event_log = EXCLUDED.event_log,
-             capture = EXCLUDED.capture, result = EXCLUDED.result, updated_at = now()
-         WHERE lr_sessions.room_id = EXCLUDED.room_id`,
-      [
-        s.sessionId,
-        roomId,
-        s.index,
-        s.state,
-        s.mode,
-        s.createdAtMs,
-        s.createdBy,
-        s.lockedAtMs,
-        JSON.stringify(s.voting),
-        s.studio === null ? null : JSON.stringify(s.studio),
-        JSON.stringify(s.eventLog),
-        s.capture === null ? null : JSON.stringify(s.capture),
-        s.result === null ? null : JSON.stringify(s.result),
-      ],
-    );
-  }
-
-  private upsertFrame(tx: Queryable, roomId: string, f: ServerFrame) {
-    return tx.query(
-      `INSERT INTO lr_frames (frame_id, room_id, uploaded_by, status, file_name, content_type, declared_bytes, raw_key,
-                              object_key, bytes, template, created_at, expires_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, ${TS(12)}, ${TS(13)}, now())
-       ON CONFLICT (frame_id) DO UPDATE
-         SET status = EXCLUDED.status, object_key = EXCLUDED.object_key, bytes = EXCLUDED.bytes,
-             template = EXCLUDED.template, expires_at = EXCLUDED.expires_at, updated_at = now()
-         WHERE lr_frames.room_id = EXCLUDED.room_id`,
-      [
-        f.frameId,
-        roomId,
-        f.uploadedBy,
-        f.status,
-        f.fileName,
-        f.contentType,
-        f.declaredBytes,
-        f.rawKey,
-        f.objectKey,
-        f.bytes,
-        f.template === null ? null : JSON.stringify(f.template),
-        f.createdAtMs,
-        f.expiresAtMs,
-      ],
-    );
-  }
-
-  private upsertParticipant(tx: Queryable, roomId: string, p: ServerParticipant) {
-    return tx.query(
-      `INSERT INTO lr_participants (participant_id, room_id, display_name, color, joined_at, connection,
-                                    disconnected_at, camera, ready, token_hash, token_issued_at,
-                                    prev_token_hash, prev_token_valid_until, mirrored, camera_presentation, updated_at)
-       VALUES ($1, $2, $3, $4, ${TS(5)}, $6, ${TS(7)}, $8, $9, $10, ${TS(11)}, $12, ${TS(13)}, $14, $15::jsonb, now())
-       ON CONFLICT (participant_id) DO UPDATE
-         SET display_name = EXCLUDED.display_name, color = EXCLUDED.color, connection = EXCLUDED.connection,
-             disconnected_at = EXCLUDED.disconnected_at, camera = EXCLUDED.camera, ready = EXCLUDED.ready,
-             mirrored = EXCLUDED.mirrored, camera_presentation = EXCLUDED.camera_presentation,
-             token_hash = EXCLUDED.token_hash, token_issued_at = EXCLUDED.token_issued_at,
-             prev_token_hash = EXCLUDED.prev_token_hash, prev_token_valid_until = EXCLUDED.prev_token_valid_until,
-             updated_at = now()
-         WHERE lr_participants.room_id = EXCLUDED.room_id`,
-      [
-        p.participantId,
-        roomId,
-        p.displayName,
-        p.color,
-        p.joinedAtMs,
-        p.connection,
-        p.disconnectedAtMs,
-        p.camera,
-        p.ready,
-        p.tokenHash,
-        p.tokenIssuedAtMs,
-        p.prevTokenHash,
-        p.prevTokenValidUntilMs,
-        p.mirrored,
-        JSON.stringify(p.cameraPresentation),
-      ],
-    );
+    return this.run(async () => {
+      const { sql, params } = buildSaveRoomSql(input, this.eventBufferSize);
+      const r = await this.db.query<{ n: number }>(sql, params);
+      if (Number(r.rows[0]?.n ?? 0) !== 1) throw new StaleRevisionError(input.state.roomId);
+    });
   }
 
   saveEditorDoc(roomId: string, sessionId: string, doc: Uint8Array) {
@@ -552,4 +403,198 @@ export class PostgresRoomStore implements RoomStore {
   close() {
     return this.db.close();
   }
+}
+
+const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
+const uniq = (ids: string[]) => [...new Set(ids)];
+
+const PARTICIPANT_SQL = `
+  p AS (
+    INSERT INTO lr_participants (participant_id, room_id, display_name, color, joined_at, connection, disconnected_at, camera,
+                                 ready, token_hash, token_issued_at, prev_token_hash, prev_token_valid_until, mirrored,
+                                 camera_presentation, updated_at)
+    SELECT x.participant_id, x.room_id, x.display_name, x.color, x.joined_at, x.connection, x.disconnected_at, x.camera,
+           x.ready, x.token_hash, x.token_issued_at, x.prev_token_hash, x.prev_token_valid_until, x.mirrored,
+           x.camera_presentation, now()
+      FROM jsonb_populate_recordset(NULL::lr_participants, $@::jsonb) x
+     WHERE EXISTS (SELECT 1 FROM r)
+    ON CONFLICT (participant_id) DO UPDATE
+      SET display_name = EXCLUDED.display_name, color = EXCLUDED.color, connection = EXCLUDED.connection,
+          disconnected_at = EXCLUDED.disconnected_at, camera = EXCLUDED.camera, ready = EXCLUDED.ready,
+          mirrored = EXCLUDED.mirrored, camera_presentation = EXCLUDED.camera_presentation,
+          token_hash = EXCLUDED.token_hash, token_issued_at = EXCLUDED.token_issued_at,
+          prev_token_hash = EXCLUDED.prev_token_hash, prev_token_valid_until = EXCLUDED.prev_token_valid_until,
+          updated_at = now()
+      WHERE lr_participants.room_id = EXCLUDED.room_id
+    RETURNING 1)`;
+
+const SESSION_SQL = `
+  s AS (
+    INSERT INTO lr_sessions (session_id, room_id, idx, state, mode, created_at, created_by, locked_at, voting, studio,
+                             event_log, capture, result, updated_at)
+    SELECT x.session_id, x.room_id, x.idx, x.state, x.mode, x.created_at, x.created_by, x.locked_at, x.voting, x.studio,
+           x.event_log, x.capture, x.result, now()
+      FROM jsonb_populate_recordset(NULL::lr_sessions, $@::jsonb) x
+     WHERE EXISTS (SELECT 1 FROM r)
+    ON CONFLICT (session_id) DO UPDATE
+      SET state = EXCLUDED.state, mode = COALESCE(lr_sessions.mode, EXCLUDED.mode), locked_at = EXCLUDED.locked_at,
+          voting = EXCLUDED.voting, studio = EXCLUDED.studio, event_log = EXCLUDED.event_log,
+          capture = EXCLUDED.capture, result = EXCLUDED.result, updated_at = now()
+      WHERE lr_sessions.room_id = EXCLUDED.room_id
+    RETURNING 1)`;
+
+const FRAME_SQL = `
+  f AS (
+    INSERT INTO lr_frames (frame_id, room_id, uploaded_by, status, file_name, content_type, declared_bytes, raw_key,
+                           object_key, bytes, template, created_at, expires_at, updated_at)
+    SELECT x.frame_id, x.room_id, x.uploaded_by, x.status, x.file_name, x.content_type, x.declared_bytes, x.raw_key,
+           x.object_key, x.bytes, x.template, x.created_at, x.expires_at, now()
+      FROM jsonb_populate_recordset(NULL::lr_frames, $@::jsonb) x
+     WHERE EXISTS (SELECT 1 FROM r)
+    ON CONFLICT (frame_id) DO UPDATE
+      SET status = EXCLUDED.status, object_key = EXCLUDED.object_key, bytes = EXCLUDED.bytes,
+          template = EXCLUDED.template, expires_at = EXCLUDED.expires_at, updated_at = now()
+      WHERE lr_frames.room_id = EXCLUDED.room_id
+    RETURNING 1)`;
+
+/** Membangun satu statement atomik untuk saveRoom. Hanya CTE yang dipakai yang ikut (setiap parameter harus terpakai). */
+export function buildSaveRoomSql(
+  { state, expectedRevision, events, changedParticipantIds, changedSessionIds = [], changedFrameIds = [], deletedFrameIds = [] }: SaveRoomInput,
+  eventBufferSize: number,
+): { sql: string; params: unknown[] } {
+  const values = [
+    state.roomId,
+    state.code,
+    state.status,
+    state.createdAtMs,
+    state.emptySinceMs,
+    state.expiresAtMs,
+    state.activeSessionId,
+    JSON.stringify(state.sessionOrder),
+    state.roomVersion,
+    state.lastSeq,
+    state.revision,
+  ];
+  const roomStmt =
+    expectedRevision === 0
+      ? `INSERT INTO lr_rooms (room_id, code, status, created_at, empty_since, expires_at, active_session_id,
+                               session_order, room_version, last_seq, revision, updated_at)
+         VALUES ($1, $2, $3, ${TS(4)}, ${TS(5)}, ${TS(6)}, $7, $8::jsonb, $9, $10, $11, now())
+         ON CONFLICT (room_id) DO NOTHING
+         RETURNING room_id`
+      : `UPDATE lr_rooms
+            SET status = $3, empty_since = ${TS(4)}, expires_at = ${TS(5)}, active_session_id = $6,
+                session_order = $7::jsonb, room_version = $8, last_seq = $9, revision = $10, updated_at = now()
+          WHERE room_id = $1 AND code = $2 AND revision = $11
+          RETURNING room_id`;
+  // Tanpa created_at pada UPDATE: setiap parameter harus dipakai di SQL (tipe parameter tak terpakai tak bisa diinfer).
+  const params: unknown[] = expectedRevision === 0 ? [...values] : [...values.slice(0, 3), ...values.slice(4), expectedRevision];
+  const ctes = [`r AS (${roomStmt})`];
+  const add = (cte: string, value: unknown) => {
+    params.push(value);
+    ctes.push(cte.replaceAll("$@", `$${params.length}`));
+  };
+
+  const pids = uniq(changedParticipantIds).filter((id) => state.participants[id]);
+  if (pids.length) {
+    add(
+      PARTICIPANT_SQL,
+      JSON.stringify(
+        pids.map((id) => {
+          const p = state.participants[id]!;
+          return {
+            participant_id: p.participantId,
+            room_id: state.roomId,
+            display_name: p.displayName,
+            color: p.color,
+            joined_at: iso(p.joinedAtMs),
+            connection: p.connection,
+            disconnected_at: iso(p.disconnectedAtMs),
+            camera: p.camera,
+            ready: p.ready,
+            token_hash: p.tokenHash,
+            token_issued_at: iso(p.tokenIssuedAtMs),
+            prev_token_hash: p.prevTokenHash,
+            prev_token_valid_until: iso(p.prevTokenValidUntilMs),
+            mirrored: p.mirrored,
+            camera_presentation: p.cameraPresentation,
+          };
+        }),
+      ),
+    );
+  }
+
+  const sids = uniq(changedSessionIds).filter((id) => state.sessions[id]);
+  if (sids.length) {
+    add(
+      SESSION_SQL,
+      JSON.stringify(
+        sids.map((id) => {
+          const s = state.sessions[id]!;
+          return {
+            session_id: s.sessionId,
+            room_id: state.roomId,
+            idx: s.index,
+            state: s.state,
+            mode: s.mode,
+            created_at: iso(s.createdAtMs),
+            created_by: s.createdBy,
+            locked_at: iso(s.lockedAtMs),
+            voting: s.voting,
+            studio: s.studio,
+            event_log: s.eventLog,
+            capture: s.capture,
+            result: s.result,
+          };
+        }),
+      ),
+    );
+  }
+
+  const fids = uniq(changedFrameIds).filter((id) => state.frames[id]);
+  if (fids.length) {
+    add(
+      FRAME_SQL,
+      JSON.stringify(
+        fids.map((id) => {
+          const f = state.frames[id]!;
+          return {
+            frame_id: f.frameId,
+            room_id: state.roomId,
+            uploaded_by: f.uploadedBy,
+            status: f.status,
+            file_name: f.fileName,
+            content_type: f.contentType,
+            declared_bytes: f.declaredBytes,
+            raw_key: f.rawKey,
+            object_key: f.objectKey,
+            bytes: f.bytes,
+            template: f.template,
+            created_at: iso(f.createdAtMs),
+            expires_at: iso(f.expiresAtMs),
+          };
+        }),
+      ),
+    );
+  }
+
+  if (deletedFrameIds.length) {
+    add(`df AS (DELETE FROM lr_frames WHERE room_id = $1::uuid AND frame_id = ANY($@::uuid[]) AND EXISTS (SELECT 1 FROM r) RETURNING 1)`, deletedFrameIds);
+  }
+
+  if (events.length) {
+    add(
+      `e AS (
+        INSERT INTO lr_room_events (room_id, seq, type, payload, room_version, at)
+        SELECT $1::uuid, e.seq, e.type, e.payload, e.room_version, e.at
+          FROM jsonb_to_recordset($@::jsonb) AS e(seq bigint, type text, payload jsonb, room_version bigint, at timestamptz)
+         WHERE EXISTS (SELECT 1 FROM r)
+        ON CONFLICT (room_id, seq) DO NOTHING
+        RETURNING 1)`,
+      JSON.stringify(events.map((e) => ({ seq: e.seq, type: e.type, payload: e.payload, room_version: e.roomVersion ?? state.roomVersion, at: iso(e.atMs) }))),
+    );
+    add(`pr AS (DELETE FROM lr_room_events WHERE room_id = $1::uuid AND seq <= $@::bigint AND EXISTS (SELECT 1 FROM r) RETURNING 1)`, state.lastSeq - eventBufferSize);
+  }
+
+  return { sql: `WITH ${ctes.join(",")} SELECT (SELECT count(*)::int FROM r) AS n`, params };
 }
