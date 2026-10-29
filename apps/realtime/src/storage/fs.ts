@@ -1,9 +1,10 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { LocalUrlSigner } from "./signer";
+import { roomIdsOf } from "./types";
 import type { ObjectStorage } from "./types";
 
-const TYPES: Record<string, string> = { png: "image/png", webp: "image/webp" };
+const TYPES: Record<string, string> = { png: "image/png", webp: "image/webp", jpg: "image/jpeg" };
 
 /**
  * Storage di folder lokal (dev). Semua key dibatasi di dalam `root`; key yang keluar dari root
@@ -40,6 +41,10 @@ export class FsObjectStorage implements ObjectStorage {
       throw err;
     }
     return entries.filter((k) => k.startsWith(prefix));
+  }
+
+  async listRoomIds() {
+    return roomIdsOf(await this.list("rooms/"));
   }
 
   async deleteMany(keys: string[]) {

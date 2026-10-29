@@ -19,6 +19,7 @@
   --ok: #23845c;
   --warn: #8c5e10; /* PROPOSED: koreksi kontras (V1: #a87114) */
   --err: #c03b3a;
+  --err-ink: #a82f2e; /* PROPOSED: teks di atas --err-bg, kontras 5.4:1 (--err di atas --err-bg hanya 4.3:1, gagal WCAG AA) */
 
   /* Status semantik (05 §2.4) */
   --ok-bg: #ddf1e6;

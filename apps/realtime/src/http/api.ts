@@ -1,12 +1,14 @@
 import { createHmac } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { FRAME_LIMITS, isCompleteRoomCode, LIMITS, normalizeRoomCode } from "@longroll/shared";
+import { CAPTURE_CONFIG, FRAME_LIMITS, isCompleteRoomCode, LIMITS, normalizeRoomCode } from "@longroll/shared";
 import type { ErrorResponse, IceServersResponse, ParticipantView, PreviewResponse, SessionResponse } from "@longroll/shared";
 import type { ServerConfig } from "../config";
 import type { FrameService } from "../frames/service";
+import { RESULT_PREVIEW_MAX_BYTES } from "../room/results";
 import type { LocalUrlSigner } from "../storage/signer";
 import type { ObjectStorage } from "../storage/types";
-import { log } from "../log";
+import { padTo } from "../guard/timing";
+import { errText, log, metrics } from "../log";
 import type { RoomActor } from "../room/RoomActor";
 import type { RoomManager } from "../room/RoomManager";
 import { RoomError } from "../room/types";
@@ -27,8 +29,6 @@ import {
   tokenFromCookie,
 } from "./util";
 
-/** Waktu respons minimum preview/join-not-found supaya ada/tidaknya kode tidak bocor lewat timing (15 §3). */
-const MIN_LOOKUP_MS = 120;
 
 interface ApiDeps {
   config: ServerConfig;
@@ -36,10 +36,15 @@ interface ApiDeps {
   store: RoomStore;
   storage: ObjectStorage;
   frames: FrameService;
+  /** Dibagi dengan gateway WS supaya kode salah lewat WS ikut dihitung (anti enumerasi). */
+  limiter?: RateLimiter;
 }
 
 const ROUTE = /^\/api\/rooms\/([^/]+)\/(preview|join|session|leave|turn-credentials)$/;
 const FRAME_ROUTE = /^\/api\/rooms\/([^/]+)\/frames(?:\/([0-9a-f-]{36})\/(complete|url))?$/;
+const ATTEMPT_ROUTE = /^\/api\/rooms\/([^/]+)\/attempts\/([0-9a-f-]{36})\/url$/;
+const ATTEMPT_KEY = /^rooms\/[^/]+\/attempts\/[^/]+\/(preview|full)\.jpg$/;
+const RESULT_KEY = /^rooms\/[^/]+\/sessions\/[^/]+\/preview\.webp$/;
 const STORAGE_ROUTE = /^\/api\/storage\/([A-Za-z0-9_\-.]{1,2048})$/;
 
 /** Storage lokal (memori/folder) menyajikan URL bertanda tangan lewat service ini. */
@@ -48,8 +53,8 @@ function isLocal(s: ObjectStorage): s is LocalStorage {
   return "signer" in s && "contentTypeOf" in s;
 }
 
-export function createApiHandler({ config, manager, store, storage, frames }: ApiDeps) {
-  const limiter = new RateLimiter(store, config.rateLimitSalt);
+export function createApiHandler({ config, manager, store, storage, frames, limiter: sharedLimiter }: ApiDeps) {
+  const limiter = sharedLimiter ?? new RateLimiter(store, config.rateLimitSalt);
 
   const wsUrlFor = (code: string) => `${config.publicWsUrl}?code=${encodeURIComponent(code)}`;
 
@@ -68,10 +73,7 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
     return tokenCookie(config, actor.roomId, token, config.credential.ttlSeconds);
   }
 
-  async function pad(started: number) {
-    const left = MIN_LOOKUP_MS - (Date.now() - started);
-    if (left > 0) await new Promise((r) => setTimeout(r, left));
-  }
+  const pad = (started: number) => padTo(started);
 
   function fail(res: ServerResponse, err: unknown, extra: Partial<ErrorResponse> = {}) {
     if (err instanceof RoomError) {
@@ -79,12 +81,14 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
         error: err.code,
         reason: err.reason,
         ...(err.code === "ROOM_EXPIRED" ? { graceSeconds: config.room.graceSeconds } : {}),
+        ...(err.code === "SERVICE_UNAVAILABLE" ? { retryAfterSec: 5 } : {}),
         ...extra,
       });
     }
+    if (err instanceof StoreUnavailableError) metrics.inc("store_unavailable_total");
     if (err instanceof StoreUnavailableError) return sendError(res, { error: "SERVICE_UNAVAILABLE", retryAfterSec: 2 });
     if (err instanceof BodyError || err instanceof SyntaxError || err instanceof URIError) return sendError(res, { error: "BAD_REQUEST" });
-    log.error("api.unhandled", { message: err instanceof Error ? err.message : "error" });
+    log.error("api.unhandled", { message: errText(err) });
     return sendError(res, { error: "SERVICE_UNAVAILABLE" });
   }
 
@@ -121,6 +125,9 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
     const body = await readJson(req);
     const rl = await limiter.consume("create", ip);
     if (!rl.ok) return sendError(res, { error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec });
+    // Pengaman global (bukan per IP): botnet dengan banyak IP tetap tidak bisa membanjiri Neon/memori.
+    const global = limiter.globalCreate();
+    if (!global.ok) return sendError(res, { error: "RATE_LIMITED", retryAfterSec: global.retryAfterSec });
     const { actor, participant, token } = await manager.create(body.displayName);
     sendJson(res, 201, sessionBody(actor, participant), { "Set-Cookie": issueCookie(actor, token) });
   }
@@ -233,6 +240,29 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
   }
 
   /**
+   * Signed URL baca foto attempt (≤ 10 menit). Hanya pemegang cookie room INI; attempt dicari di state room
+   * itu sendiri, jadi attempt room lain / yang sudah dihapus = 404. Preview: semua peserta (saling melihat
+   * hasil & retake, 09 §9.3). Full: pemiliknya atau bila sudah dipilih (accepted) di shot DONE.
+   */
+  async function attemptUrl(req: IncomingMessage, res: ServerResponse, code: string, attemptId: string, url: URL) {
+    if (req.headers.origin !== undefined && !isAllowedOrigin(config, req.headers.origin)) return sendError(res, { error: "ORIGIN_FORBIDDEN" });
+    const who = await authed(req, res, code);
+    if (!who) return;
+    const q = url.searchParams.get("part");
+    const part = q === "full" ? "full" : q === "edit" ? "edit" : "preview";
+    const a = who.actor.attemptRecord(attemptId);
+    if (!a || a.purged || a.status === "FAILED") return sendError(res, { error: "FRAME_NOT_FOUND" });
+    if (part === "full" && !a.full) return sendError(res, { error: "FRAME_NOT_FOUND" });
+    if (part === "edit" && !a.edit) return sendError(res, { error: "FRAME_NOT_FOUND" });
+    if (part === "preview" && !a.preview) return sendError(res, { error: "FRAME_NOT_FOUND" });
+    if (part !== "preview" && a.ownerId !== who.pid && !who.actor.isAcceptedAttempt(attemptId)) return sendError(res, { error: "FORBIDDEN_NOT_OWNER" });
+    const key = part === "full" ? a.fullKey : part === "edit" ? a.editKey : a.previewKey;
+    if (!key || !storage) return sendError(res, { error: "FRAME_NOT_FOUND" });
+    const ttl = CAPTURE_CONFIG.viewUrlTtlSec;
+    sendJson(res, 200, { url: await storage.presignGet(key, ttl), expiresAtMs: Date.now() + ttl * 1000 });
+  }
+
+  /**
    * URL bertanda tangan untuk storage LOKAL (meniru presigned S3). PUT hanya ke key upload mentah,
    * Content-Type wajib sama dengan yang ditandatangani, body dibatasi ukuran deklarasi (≤ 10 MB).
    */
@@ -249,31 +279,41 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
       res.setHeader("Cache-Control", "private, max-age=300");
       res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
       res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.end(Buffer.from(bytes));
       return;
     }
-    // PUT
-    if (!claims.k.endsWith(".upload") || !claims.ct || !claims.max) return sendJson(res, 403, { error: "AUTH_INVALID" });
-    const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
-    if (type !== claims.ct) return sendJson(res, 403, { error: "FRAME_UNSUPPORTED" });
-    const max = Math.min(claims.max, FRAME_LIMITS.MAX_BYTES);
-    const declared = Number(req.headers["content-length"] ?? "NaN");
-    if (Number.isFinite(declared) && declared > max) {
-      req.resume();
-      return sendError(res, { error: "FRAME_TOO_LARGE" });
-    }
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of req) {
-      size += (chunk as Buffer).length;
-      if (size > max) {
-        req.destroy();
+    // PUT sekali pakai: objek yang sudah diverifikasi server tidak bisa ditimpa dengan URL yang sama. Token "habis"
+    // hanya bila objek benar-benar tertulis; kegagalan melepasnya supaya retry jaringan boleh memakai URL yang sama.
+    if (!storage.signer.consume(token)) return sendJson(res, 403, { error: "AUTH_INVALID" });
+    let stored = false;
+    try {
+      if ((!claims.k.endsWith(".upload") && !ATTEMPT_KEY.test(claims.k) && !RESULT_KEY.test(claims.k)) || !claims.ct || !claims.max) return sendJson(res, 403, { error: "AUTH_INVALID" });
+      const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+      if (type !== claims.ct) return sendJson(res, 403, { error: "FRAME_UNSUPPORTED" });
+      const max = Math.min(claims.max, claims.k.endsWith(".upload") ? FRAME_LIMITS.MAX_BYTES : RESULT_KEY.test(claims.k) ? RESULT_PREVIEW_MAX_BYTES : CAPTURE_CONFIG.maxFullBytes);
+      const declared = Number(req.headers["content-length"] ?? "NaN");
+      if (Number.isFinite(declared) && declared > max) {
+        req.resume();
         return sendError(res, { error: "FRAME_TOO_LARGE" });
       }
-      chunks.push(chunk as Buffer);
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > max) {
+          req.destroy();
+          return sendError(res, { error: "FRAME_TOO_LARGE" });
+        }
+        chunks.push(chunk as Buffer);
+      }
+      await storage.put(claims.k, Buffer.concat(chunks), claims.ct);
+      stored = true;
+      sendJson(res, 200, { ok: true });
+    } finally {
+      if (!stored) storage.signer.release(token);
     }
-    await storage.put(claims.k, Buffer.concat(chunks), claims.ct);
-    sendJson(res, 200, { ok: true });
   }
 
   async function leave(req: IncomingMessage, res: ServerResponse, code: string) {
@@ -290,7 +330,17 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
     const url = new URL(req.url ?? "/", "http://internal");
     if (!url.pathname.startsWith("/api/")) return false;
     applyCors(config, req, res);
+    res.setHeader("Referrer-Policy", "no-referrer");
     try {
+      if (req.method !== "OPTIONS") {
+        // Lalu lintas umum per IP di memori (tanpa menyentuh Neon). Storage lokal punya jatah lebih besar.
+        const ip = clientIp(req, config.trustProxy);
+        const g = limiter.general(url.pathname.startsWith("/api/storage/") ? "storage" : "api", ip);
+        if (!g.ok) {
+          sendError(res, { error: "RATE_LIMITED", retryAfterSec: g.retryAfterSec });
+          return true;
+        }
+      }
       if (req.method === "OPTIONS") {
         if (!isAllowedOrigin(config, req.headers.origin)) {
           sendError(res, { error: "ORIGIN_FORBIDDEN" });
@@ -309,6 +359,11 @@ export function createApiHandler({ config, manager, store, storage, frames }: Ap
       }
       if (url.pathname === "/api/rooms" && req.method === "POST") {
         await createRoom(req, res);
+        return true;
+      }
+      const am = ATTEMPT_ROUTE.exec(url.pathname);
+      if (am && req.method === "GET") {
+        await attemptUrl(req, res, normalizeRoomCode(decodeURIComponent(am[1]!)), am[2]!, url);
         return true;
       }
       const fm = FRAME_ROUTE.exec(url.pathname);

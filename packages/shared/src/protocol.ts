@@ -1,5 +1,6 @@
 import type { PlayerColor } from "./players";
 import type { SessionView } from "./session";
+import type { CaptureState } from "./capture";
 import type { CustomFrameView, StudioChange, StudioState } from "./studio/types";
 
 /**
@@ -109,6 +110,17 @@ export type ErrorCode =
   | "FRAME_DECODE_FAILED"
   | "FRAME_QUOTA"
   | "FRAME_NOT_FOUND"
+  | "ALREADY_ARMED"
+  | "TOO_LATE"
+  | "CONFIRM_REQUIRED"
+  | "NOT_REQUIRED"
+  | "SHOT_DONE"
+  | "ATTEMPT_REJECTED"
+  | "UPLOAD_MISMATCH"
+  | "SKIP_NOT_ALLOWED"
+  | "ROOM_STORAGE_LIMIT"
+  | "DOC_TOO_LARGE"
+  | "READ_ONLY"
   | "SERVICE_UNAVAILABLE";
 
 // ---------- HTTP ----------
@@ -183,6 +195,15 @@ export type RoomEvent =
   | { type: "vote.tie"; payload: { sessionId: string; round: 2; options: string[] } }
   /** Studio bersama berubah (P05): StudioState lengkap + ringkasan perubahan (siapa, field, Balikin). */
   | { type: "studio.updated"; payload: { sessionId: string; studio: StudioState; change: StudioChange | null } }
+  /** P08: klien diminta merender pratinjau hasil sesi (finalizer; fallback round-robin 30 detik). */
+  | { type: "result.render.request"; payload: { sessionId: string; version: number } }
+  /** P06: state capture lengkap (view publik) — semua klien identik. */
+  | { type: "capture.state"; payload: { sessionId: string; capture: CaptureState } }
+  | { type: "shot.countdown"; payload: { sessionId: string; shotIndex: number; t0ServerMs: number; countdownSec: number; initiatedBy: string; required: string[] } }
+  | { type: "shot.cancelled"; payload: { sessionId: string; shotIndex: number; by: string } }
+  | { type: "retake.started"; payload: { sessionId: string; shotIndex: number; participantId: string; rejectedAttemptId: string | null; t0ServerMs: number; attemptNo: number } }
+  | { type: "attempt.ready"; payload: { sessionId: string; shotIndex: number; participantId: string; attemptId: string; part: "preview" | "full" } }
+  | { type: "shot.done"; payload: { sessionId: string; shotIndex: number; accepted: Record<string, string | null>; last: boolean } }
   /** Frame custom selesai divalidasi & siap dipakai (10 §9). */
   | { type: "frame.added"; payload: { frame: CustomFrameView; by: string } }
   | { type: "vote.resolved"; payload: { sessionId: string; mode: string; method: string; tally: Record<string, number>; options?: string[] } }
@@ -203,6 +224,8 @@ export interface AckPayload {
   reason?: string;
   /** Data tambahan non-rahasia (mis. pelanggaran safeguard + alternatif). */
   detail?: unknown;
+  /** Balasan intent yang sukses (mis. `attempt.prepare` → URL upload bertanda tangan). */
+  data?: unknown;
 }
 
 export interface CursorPayload {
@@ -282,4 +305,51 @@ export interface FrameCompleteResponse {
 export interface FrameUrlResponse {
   url: string;
   expiresAtMs: number;
+}
+
+// ---------- Capture (P06, 14 §7) ----------
+
+/** Balasan `attempt.prepare` (via `ack.data`). */
+export interface AttemptPrepared {
+  attemptId: string;
+  uploadUrls: { preview: { url: string; headers: Record<string, string> }; full: { url: string; headers: Record<string, string> } };
+  maxBytes: { preview: number; full: number };
+  expiresInSec: number;
+}
+
+/** `GET /api/rooms/{code}/attempts/{attemptId}/url?part=preview|full` → signed URL berumur pendek. */
+export interface AttemptUrlResponse {
+  url: string;
+  expiresAtMs: number;
+}
+
+// ---------- Hasil & galeri (P08, 14 10) ----------
+
+/** `GalleryView`: TANPA field attempt REJECTED (REQ-GAL-07/08, DEC-092). URL = signed, TTL <= 10 menit. */
+export interface GalleryView {
+  sessions: {
+    sessionId: string;
+    index: number;
+    mode: string;
+    title: string;
+    finalizedAtMs: number;
+    version: number;
+    dateMs: number;
+    state: "FINAL" | "CLOSED";
+    previewUrl: string | null;
+    expiresAtMs: number;
+    participants: { participantId: string; name: string; color: string }[];
+  }[];
+  perPerson: { sessionId: string; shotIndex: number; participantId: string; participantName: string; color: string; attemptId: string; previewUrl: string; expiresAtMs: number }[];
+}
+
+export interface AssetUrlsResponse {
+  urls: Record<string, { url: string; expiresAtMs: number }>;
+}
+
+/** `result.preview.prepare` (ack.data): URL PUT bertanda tangan untuk pratinjau WebP (<= 1 MB). */
+export interface ResultPreviewPrepared {
+  uploadUrl: { url: string; headers: Record<string, string> };
+  maxBytes: number;
+  version: number;
 }

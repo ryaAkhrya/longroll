@@ -40,9 +40,16 @@ export interface ServerConfig {
    */
   ice: { stunUrls: string[]; turnUrls: string[]; turnSharedSecret: string | null; turnTtlSeconds: number };
   rateLimitSalt: string;
-  trustProxy: boolean;
+  /** Jumlah proxy tepercaya di depan service (0 = tidak ada; XFF diabaikan). Hanya entri XFF ke-N dari KANAN yang dipercaya. */
+  trustProxy: number;
   cleanupRetrySeconds: number[];
   sweepIntervalMs: number;
+  /** Batas room aktif di memori satu instance (pengaman memori; di atasnya create → SERVICE_UNAVAILABLE). */
+  maxActiveRooms: number;
+  /** Sweeper objek yatim (15 §8.3): interval; 0 = nonaktif. */
+  orphanSweepIntervalMs: number;
+  /** Ekspor snapshot metrik ke log; 0 = nonaktif. */
+  metricsIntervalMs: number;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -64,6 +71,17 @@ function list(value: string | undefined, fallback: string): string[] {
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value.trim() === "") return fallback;
   return value === "1" || value.toLowerCase() === "true";
+}
+
+/** TRUST_PROXY: "true"/"1" = 1 proxy tepercaya; angka N = N proxy; kosong/false = 0. */
+function proxyHops(value: string | undefined): number {
+  if (value === undefined || value.trim() === "") return 0;
+  const v = value.trim().toLowerCase();
+  if (v === "false" || v === "0") return 0;
+  if (v === "true") return 1;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 5) throw new Error(`TRUST_PROXY tidak valid: "${value}"`);
+  return n;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -124,10 +142,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     },
     // Salt acak per proses bila tidak diset: hash IP berganti saat restart (rotasi alami).
     rateLimitSalt: env.RATE_LIMIT_SALT?.trim() || randomBytes(32).toString("base64url"),
-    trustProxy: bool(env.TRUST_PROXY, false),
+    trustProxy: proxyHops(env.TRUST_PROXY),
     cleanupRetrySeconds: (env.CLEANUP_RETRY_SECONDS ?? "60,300,900,3600")
       .split(",")
       .map((s) => num(s, 60)),
     sweepIntervalMs: num(env.SWEEP_INTERVAL_SECONDS, 60) * 1000,
+    maxActiveRooms: num(env.MAX_ACTIVE_ROOMS, 500),
+    orphanSweepIntervalMs: num(env.ORPHAN_SWEEP_INTERVAL_SECONDS, 24 * 60 * 60) * 1000,
+    metricsIntervalMs: num(env.METRICS_INTERVAL_SECONDS, 300) * 1000,
   };
 }

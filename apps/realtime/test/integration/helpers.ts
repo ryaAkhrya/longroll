@@ -19,7 +19,7 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function startServer(env: Record<string, string> = {}, store: RoomStore = new MemoryRoomStore()): Promise<TestServer> {
+export async function startServer(env: Record<string, string> = {}, store: RoomStore = new MemoryRoomStore(), sharedStorage?: MemoryObjectStorage): Promise<TestServer> {
   const config = loadConfig({
     NODE_ENV: "test",
     ALLOWED_ORIGINS: ORIGIN,
@@ -28,7 +28,7 @@ export async function startServer(env: Record<string, string> = {}, store: RoomS
     CLEANUP_RETRY_SECONDS: "1",
     ...env,
   });
-  const storage = new MemoryObjectStorage();
+  const storage = sharedStorage ?? new MemoryObjectStorage();
   const app = createRealtimeApp(config, store, storage);
   await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", () => r()));
   const { port } = app.server.address() as AddressInfo;
@@ -47,9 +47,14 @@ export async function startServer(env: Record<string, string> = {}, store: RoomS
 export class Client {
   cookies = new Map<string, string>();
   constructor(
-    private readonly srv: TestServer,
+    private srv: TestServer,
     private readonly ip?: string,
   ) {}
+
+  /** Arahkan klien ke instance server baru (simulasi restart; cookie dipertahankan seperti browser). */
+  rebind(srv: TestServer) {
+    this.srv = srv;
+  }
 
   private cookieHeader() {
     return Array.from(this.cookies, ([k, v]) => `${k}=${v}`).join("; ");

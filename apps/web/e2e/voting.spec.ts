@@ -50,7 +50,7 @@ test("4 peserta: mulai vote, suara, reload, Tutup vote + jendela 5 s, hasil, stu
     await expect(p.getByRole("region", { name: "Studio sesi 1" })).toBeVisible({ timeout: 6_000 });
     await expect(p.getByLabel("dikunci").first()).toBeVisible();
   }
-  await expect(a.getByRole("button", { name: /Ambil foto — belum tersedia/ })).toBeDisabled();
+  await expect(a.getByRole("button", { name: /^Ambil foto, hitung mundur/ })).toBeEnabled();
 
   // Reload di studio → kembali ke studio (bukan voting).
   await c.reload();

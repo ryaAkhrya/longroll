@@ -6,3 +6,6 @@ export * from "./room-code";
 export * from "./session";
 export * from "./types";
 export * from "./studio";
+export * from "./capture";
+export * from "./editor";
+export * from "./render";

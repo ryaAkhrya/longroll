@@ -1,0 +1,19 @@
+.panel { display: flex; flex-direction: column; gap: 14px; }
+.group { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.group legend { padding: 0; margin-bottom: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink3); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.preset, .presetOn { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 10px 12px; border: 0; border-radius: 14px; font: inherit; text-align: left; cursor: pointer; min-height: 44px; color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line2); }
+.presetOn { background: var(--lav); color: var(--plum); box-shadow: inset 0 0 0 2px var(--plum); }
+.preset strong, .presetOn strong { font-size: 13.5px; }
+.preset span, .presetOn span { font-size: 11.5px; color: var(--ink3); }
+.hint { margin: 0; font-size: 12.5px; color: var(--ink3); }
+.progress { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink2); }
+.progress p { margin: 0; }
+.bar { height: 8px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--plum); transition: width var(--motion-base); }
+.actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.actions > :last-child:is(button) { align-self: center; }
+.link { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--plum); text-decoration: underline; }
+.file { margin: 0; font-size: 11.5px; color: var(--ink3); word-break: break-all; text-align: center; }
+@media (max-width: 599px) { .presets { grid-template-columns: 1fr; } }

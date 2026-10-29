@@ -10,7 +10,10 @@ saat start ia hanya memeriksa bahwa `lr_schema_migrations` berisi versi yang dib
 | `migrations/0001_p02_rooms.sql` | Idempoten, non-destruktif, satu transaksi | Wajib sebelum service memakai `DATABASE_URL` |
 | `migrations/0002_p03_camera.sql` | Idempoten, non-destruktif (ADD COLUMN) | P03 |
 | `migrations/0003_p04_sessions.sql` | Idempoten, non-destruktif (`lr_sessions`) | P04 |
-| `migrations/0004_p05_frames.sql` | Idempoten, non-destruktif (`lr_frames`, indeks aset frame custom) | P05 — service mensyaratkan versi ini |
+| `migrations/0004_p05_frames.sql` | Idempoten, non-destruktif (`lr_frames`, indeks aset frame custom) | P05 |
+| `migrations/0005_p06_capture.sql` | `lr_sessions.capture jsonb` | P06 |
+| `migrations/0006_p07_editor_docs.sql` | `lr_editor_docs` (SELECT/INSERT/UPDATE untuk `longroll_app`) | P07 |
+| `migrations/0007_p08_results.sql` | `lr_sessions.result jsonb` | P08 — service mensyaratkan versi ini |
 | `maintenance/inspect.sql` | Read-only | Setelah migrasi / kapan saja |
 | `maintenance/grants_template.sql` | Membuat role `longroll_app` + hak minimum | Wajib sebelum service memakai database |
 | `maintenance/purge_expired.sql` | Hanya baris kedaluwarsa | Opsional; service sudah mem-purge berkala |
@@ -35,7 +38,7 @@ saat start ia hanya memeriksa bahwa `lr_schema_migrations` berisi versi yang dib
 
 Migrasi dijalankan berurutan sesuai nomor; setiap file mencatat versinya di `lr_schema_migrations` dan
 memberi hak DML minimum ke `longroll_app` bila role sudah ada. Jangan menjalankan ulang file yang versinya
-sudah tercatat. Status di Neon `development`: 0001–0004 diterapkan (2026-10-26). Produksi: belum.
+sudah tercatat. Status di Neon `development`: 0001–0007 diterapkan (0001–0004: 2026-10-26; 0005 capture, 0006 editor docs, 0007 hasil sesi: 2026-10-28). Produksi: belum.
 
 ## Perilaku data (tanpa TTL bawaan)
 

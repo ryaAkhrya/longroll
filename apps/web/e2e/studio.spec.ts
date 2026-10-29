@@ -146,8 +146,8 @@ test("mobile: feed fullscreen, dock (Timer & shutter nonaktif), Alat → sheet F
   await joinRoom(b.page, code, "Raka");
   await toStudio([a.page, b.page], "Photo Grid");
   const m = a.page;
-  await expect(m.getByRole("button", { name: "Timer — belum tersedia" })).toBeDisabled();
-  await expect(m.getByRole("button", { name: /Ambil foto — belum tersedia/ })).toBeDisabled();
+  await expect(m.getByRole("button", { name: /^Timer \d+s/ })).toBeEnabled();
+  await expect(m.getByRole("button", { name: /^Ambil foto, hitung mundur/ })).toBeEnabled();
   await expect(m.getByText(code, { exact: true }).filter({ visible: true }).first()).toBeVisible();
   await shot(m, "p05-studio-mobile");
   await m.getByRole("button", { name: "Alat" }).click();

@@ -1,5 +1,5 @@
 import { ROOM_DEFAULTS } from "@longroll/shared";
-import { log, metrics } from "../log";
+import { errText, log, metrics } from "../log";
 import type { ObjectStorage } from "../storage/types";
 import { DELETE_BATCH, roomPrefix } from "../storage/types";
 import type { RoomStore } from "../store/types";
@@ -19,6 +19,8 @@ export interface CleanupDeps {
 export class RoomCleanup {
   private readonly running = new Map<string, Promise<boolean>>();
   private readonly retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Room yang cleanup-nya belum terverifikasi: sejak kapan & berapa kali gagal (alarm 'macet', 15 §8.3). */
+  private readonly unresolved = new Map<string, { sinceMs: number; failures: number }>();
 
   constructor(private readonly deps: CleanupDeps) {}
 
@@ -35,11 +37,15 @@ export class RoomCleanup {
   schedule(roomId: string, code: string, onDone: () => void, attemptNo = 0) {
     // Sudah dijadwalkan/berjalan: jangan tumpuk timer retry ganda (sweeper memanggil berulang).
     if (attemptNo === 0 && (this.retryTimers.has(roomId) || this.running.has(roomId))) return;
+    if (!this.unresolved.has(roomId)) this.unresolved.set(roomId, { sinceMs: Date.now(), failures: 0 });
     void this.attempt(roomId, code).then((ok) => {
       if (ok) {
+        this.unresolved.delete(roomId);
         onDone();
         return;
       }
+      const u = this.unresolved.get(roomId);
+      if (u) u.failures++;
       const delays = this.deps.retrySeconds;
       const delay = delays[Math.min(attemptNo, delays.length - 1)] ?? 3600;
       const t = setTimeout(() => {
@@ -76,14 +82,26 @@ export class RoomCleanup {
         return false;
       }
       const durationMs = Date.now() - started;
+      metrics.observe("cleanup_duration_ms", durationMs);
       metrics.inc("cleanup_success_total");
       log.info("cleanup.done", { roomId, durationMs, objects: keys.length });
       return true;
     } catch (err) {
       metrics.inc("cleanup_failures_total");
-      log.warn("cleanup.failed", { roomId, message: err instanceof Error ? err.message : "error" });
+      log.warn("cleanup.failed", { roomId, message: errText(err) });
       return false;
     }
+  }
+
+  /** Cleanup yang belum selesai lebih lama dari `olderThanMs` (alarm cleanup macet). */
+  stuck(olderThanMs: number, now = Date.now()): { roomId: string; sinceMs: number; failures: number }[] {
+    const out: { roomId: string; sinceMs: number; failures: number }[] = [];
+    for (const [roomId, u] of this.unresolved) if (now - u.sinceMs >= olderThanMs) out.push({ roomId, ...u });
+    return out;
+  }
+
+  get unresolvedCount() {
+    return this.unresolved.size;
   }
 
   dispose() {

@@ -6,7 +6,7 @@ import { StaleRevisionError, StoreUnavailableError, TOMBSTONE, windowStartMs } f
 import type { LoadedRoom, RoomStore, SaveRoomInput } from "./types";
 
 /** Versi skema yang wajib sudah dijalankan manual oleh pemilik database (db/migrations). */
-export const REQUIRED_SCHEMA_VERSION = "0004_p05_frames";
+export const REQUIRED_SCHEMA_VERSION = "0007_p08_results";
 
 /** ms epoch → timestamptz (NULL tetap NULL). */
 const TS = (n: number) => `to_timestamp($${n}::float8 / 1000)`;
@@ -56,6 +56,8 @@ interface SessionRow {
   locked_ms: number | null;
   voting: SessionView["voting"];
   studio: SessionView["studio"];
+  capture: SessionView["capture"];
+  result: SessionView["result"];
   event_log: SessionView["eventLog"];
 }
 
@@ -236,11 +238,12 @@ export class PostgresRoomStore implements RoomStore {
 
   private upsertSession(tx: Queryable, roomId: string, s: SessionView) {
     return tx.query(
-      `INSERT INTO lr_sessions (session_id, room_id, idx, state, mode, created_at, created_by, locked_at, voting, studio, event_log, updated_at)
-       VALUES ($1, $2, $3, $4, $5, ${TS(6)}, $7, ${TS(8)}, $9::jsonb, $10::jsonb, $11::jsonb, now())
+      `INSERT INTO lr_sessions (session_id, room_id, idx, state, mode, created_at, created_by, locked_at, voting, studio, event_log, capture, result, updated_at)
+       VALUES ($1, $2, $3, $4, $5, ${TS(6)}, $7, ${TS(8)}, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, now())
        ON CONFLICT (session_id) DO UPDATE
          SET state = EXCLUDED.state, mode = COALESCE(lr_sessions.mode, EXCLUDED.mode), locked_at = EXCLUDED.locked_at,
-             voting = EXCLUDED.voting, studio = EXCLUDED.studio, event_log = EXCLUDED.event_log, updated_at = now()
+             voting = EXCLUDED.voting, studio = EXCLUDED.studio, event_log = EXCLUDED.event_log,
+             capture = EXCLUDED.capture, result = EXCLUDED.result, updated_at = now()
          WHERE lr_sessions.room_id = EXCLUDED.room_id`,
       [
         s.sessionId,
@@ -254,6 +257,8 @@ export class PostgresRoomStore implements RoomStore {
         JSON.stringify(s.voting),
         s.studio === null ? null : JSON.stringify(s.studio),
         JSON.stringify(s.eventLog),
+        s.capture === null ? null : JSON.stringify(s.capture),
+        s.result === null ? null : JSON.stringify(s.result),
       ],
     );
   }
@@ -319,6 +324,27 @@ export class PostgresRoomStore implements RoomStore {
     );
   }
 
+  saveEditorDoc(roomId: string, sessionId: string, doc: Uint8Array) {
+    return this.run(async () => {
+      await this.db.query(
+        `INSERT INTO lr_editor_docs (session_id, room_id, doc, bytes, version, updated_at)
+         VALUES ($1, $2, $3, $4, 1, now())
+         ON CONFLICT (session_id) DO UPDATE
+           SET doc = EXCLUDED.doc, bytes = EXCLUDED.bytes, version = lr_editor_docs.version + 1, updated_at = now()
+           WHERE lr_editor_docs.room_id = EXCLUDED.room_id`,
+        [sessionId, roomId, Buffer.from(doc), doc.byteLength],
+      );
+    });
+  }
+
+  loadEditorDoc(sessionId: string) {
+    return this.run(async () => {
+      const r = await this.db.query<{ doc: Buffer }>("SELECT doc FROM lr_editor_docs WHERE session_id = $1", [sessionId]);
+      const row = r.rows[0];
+      return row ? new Uint8Array(row.doc) : null;
+    });
+  }
+
   loadRoom(roomId: string): Promise<LoadedRoom | null> {
     return this.run(async () => {
       const rooms = await this.db.query<RoomRow>(
@@ -339,7 +365,7 @@ export class PostgresRoomStore implements RoomStore {
       );
       const sess = await this.db.query<SessionRow>(
         `SELECT session_id, idx, state, mode, ${MS("created_at")} AS created_ms, created_by, ${MS("locked_at")} AS locked_ms,
-                voting, studio, event_log
+                voting, studio, event_log, capture, result
            FROM lr_sessions WHERE room_id = $1 ORDER BY idx`,
         [roomId],
       );
@@ -399,6 +425,8 @@ export class PostgresRoomStore implements RoomStore {
               lockedAtMs: s.locked_ms,
               voting: s.voting,
               studio: s.studio,
+              capture: s.capture ?? null,
+              result: s.result ?? null,
               eventLog: s.event_log ?? [],
             } satisfies SessionView,
           ]),
@@ -431,6 +459,15 @@ export class PostgresRoomStore implements RoomStore {
         atMs: e.at_ms,
       }));
       return { state, events };
+    });
+  }
+
+  existingRoomIds(roomIds: string[]) {
+    return this.run(async () => {
+      const valid = roomIds.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (!valid.length) return new Set<string>();
+      const r = await this.db.query<{ room_id: string }>("SELECT room_id::text AS room_id FROM lr_rooms WHERE room_id::text = ANY($1::text[])", [valid]);
+      return new Set(r.rows.map((x) => x.room_id.toLowerCase()));
     });
   }
 
@@ -467,7 +504,8 @@ export class PostgresRoomStore implements RoomStore {
               + (SELECT count(*) FROM lr_participants WHERE room_id = $1)
               + (SELECT count(*) FROM lr_room_events WHERE room_id = $1)
               + (SELECT count(*) FROM lr_sessions WHERE room_id = $1)
-              + (SELECT count(*) FROM lr_frames WHERE room_id = $1) AS n`,
+              + (SELECT count(*) FROM lr_frames WHERE room_id = $1)
+              + (SELECT count(*) FROM lr_editor_docs WHERE room_id = $1) AS n`,
         [roomId],
       );
       return Number(r.rows[0]?.n ?? 0);

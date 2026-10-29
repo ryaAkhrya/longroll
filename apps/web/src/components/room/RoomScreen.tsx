@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MODE_INFO, SESSION_CONFIG } from "@longroll/shared";
-import type { ParticipantView, SessionResponse } from "@longroll/shared";
+import type { ParticipantView, SessionResponse, SessionView } from "@longroll/shared";
 import { AppShell } from "@/components/layout/AppShell";
 import { Container } from "@/components/layout/Container";
 import { MobileRoomHeader } from "@/components/layout/MobileRoomHeader";
@@ -19,6 +19,12 @@ import { useNow, useOrigin, useRoomState } from "@/room/hooks";
 import { SessionStepper } from "@/components/session/SessionStepper";
 import { VoteResult } from "@/components/session/VoteResult";
 import { VotingScreen } from "@/components/session/VotingScreen";
+import dynamic from "next/dynamic";
+import { GalleryScreen } from "@/components/result/GalleryScreen";
+import { InviteDialog } from "@/components/result/InviteDialog";
+import { peerStatus, useInviteStatus } from "@/components/result/inviteStatus";
+import { PreviewWorker } from "@/components/result/PreviewWorker";
+import { ResultScreen } from "@/components/result/ResultScreen";
 import { StudioContainer } from "@/components/studio/StudioContainer";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { CursorLayer } from "./CursorLayer";
@@ -41,6 +47,12 @@ const TOAST_MAX_AGE_MS = 10_000;
  * Room tersambung: lobby SCR-05 + presence real-time, banner SCR-20(b), takeover multi-tab, keluar.
  * Kursor lobby hanya di dev (DEC-071 tidak menampilkan kursor di lobby; P02 memakainya sebagai permukaan uji).
  */
+/** Editor di-lazy-load (Konva + Yjs) supaya JS rute room tetap ringan (13 §14). */
+const EditorScreen = dynamic(() => import("@/components/editor/EditorScreen").then((m) => m.EditorScreen), {
+  ssr: false,
+  loading: () => <div role="status" aria-label="Memuat editor" style={{ flex: 1 }} />,
+});
+
 export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }: RoomScreenProps) {
   const [client] = useState(() => new RoomClient(code, session));
   const state = useRoomState(client);
@@ -123,21 +135,45 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
   // Routing layar dari state sesi otoritatif (13 §3: semua layar adalah state di /r/[code]).
   const live = room?.activeSession && room.activeSession.state !== "CLOSED" ? room.activeSession : null;
   const [enteredBooth, setEnteredBooth] = useState<string | null>(null);
+  // SCR-17/19: hasil FINAL terakhir yang saya lihat tetap tampil bila saya memilih "Bentar" saat sesi baru dimulai.
+  const [lastFinal, setLastFinal] = useState<SessionView | null>(null);
+  if (live?.state === "FINAL" && lastFinal !== live) setLastFinal(live);
+  const [showGallery, setShowGallery] = useState(false);
+  const [invite, setInvite] = useState<{ sessionId: string; kind: "join" | "later" } | null>(null);
+  const newer = live && lastFinal && live.sessionId !== lastFinal.sessionId && live.index > lastFinal.index ? live : null;
+  const answered = newer && invite?.sessionId === newer.sessionId ? invite.kind : null;
+  const mine = !!newer && newer.createdBy === state.me;
+  const askInvite = !!newer && !mine && answered === null;
+  // SCR-19: status peserta lain (Ikut / Bentar / Lagi unduh… / Belum jawab) lewat presence.activity (volatile, info UX saja).
+  const peerMap = useInviteStatus(client, newer && !mine ? newer.sessionId : null, answered);
+  const invitePeers = newer
+    ? active
+        .filter((p) => p.participantId !== state.me)
+        .map((p) => ({ participantId: p.participantId, name: p.displayName, color: p.color, status: p.participantId === newer.createdBy ? ("join" as const) : peerStatus(peerMap[p.participantId]) }))
+    : [];
+  const deferred = !!newer && !mine && answered !== "join";
   const resultPending = !!live && live.state !== "VOTING" && live.lockedAtMs !== null && enteredBooth !== live.sessionId;
   const nowMs = useNow(250, resultPending);
   const showResult = resultPending && nowMs + state.clockOffsetMs < live!.lockedAtMs! + SESSION_CONFIG.studioAutoEnterMs;
-  const view: "check" | "lobby" | "voting" | "result" | "studio" = !checkDone
+  const view: "check" | "lobby" | "voting" | "result" | "studio" | "editing" | "final" | "deferred" = !checkDone
     ? "check"
-    : !live
-      ? "lobby"
-      : live.state === "VOTING"
-        ? "voting"
-        : showResult
-          ? "result"
-          : "studio";
+    : deferred && lastFinal?.result
+      ? "deferred"
+      : !live
+        ? "lobby"
+        : live.state === "VOTING"
+          ? "voting"
+          : showResult
+            ? "result"
+            : live.state === "FINAL"
+              ? "final"
+              : live.state === "EDITING"
+                ? "editing"
+                : "studio";
 
   const startVote = async () => {
     const ack = await client.sendIntent("session.create", {});
+    if (ack.ok) setShowGallery(false);
     if (!ack.ok)
       toast.show({
         message:
@@ -204,6 +240,21 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
           </Container>
         ) : view === "check" ? (
           <CameraCheck onDone={finishCheck} />
+        ) : showGallery ? (
+          <GalleryScreen client={client} room={room} onBack={() => setShowGallery(false)} onNewSession={() => void startVote()} />
+        ) : view === "deferred" ? (
+          <ResultScreen
+            client={client}
+            room={room}
+            session={lastFinal!}
+            meId={state.me!}
+            closed
+            onGallery={() => setShowGallery(true)}
+            onNewSession={() => setInvite({ sessionId: live!.sessionId, kind: "join" })}
+            newSession={{ index: live!.index, label: live!.state === "VOTING" ? "vote" : "jalan", onJoin: () => setInvite({ sessionId: live!.sessionId, kind: "join" }) }}
+          />
+        ) : view === "final" ? (
+          <ResultScreen client={client} room={room} session={live!} meId={state.me!} onGallery={() => setShowGallery(true)} onNewSession={() => void startVote()} />
         ) : view === "lobby" ? (
           <LobbyLayout
             room={room}
@@ -230,6 +281,8 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
             clockOffsetMs={state.clockOffsetMs}
             onEnter={() => setEnteredBooth(live!.sessionId)}
           />
+        ) : view === "editing" ? (
+          <EditorScreen client={client} room={room} session={live!} meId={state.me!} />
         ) : (
           <StudioContainer
             client={client}
@@ -241,12 +294,23 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
             onOpenCameraPanel={() => setCameraPanel(true)}
           />
         )}
+        {room && state.me && checkDone && <PreviewWorker client={client} room={room} meId={state.me} />}
+        <InviteDialog
+          open={askInvite}
+          from={room?.participants.find((p) => p.participantId === newer?.createdBy)?.displayName ?? "Seseorang"}
+          index={newer?.index ?? 0}
+          peers={invitePeers}
+          onJoin={() => (setShowGallery(false), setInvite({ sessionId: newer!.sessionId, kind: "join" }))}
+          onLater={() => setInvite({ sessionId: newer!.sessionId, kind: "later" })}
+        />
         <LeaveDialog
           open={leaveOpen}
           onClose={() => setLeaveOpen(false)}
           onConfirm={() => client.leave()}
           isLast={isLast}
           graceMinutes={graceMinutes}
+          hasResults={!!lastFinal}
+          onDownloadAll={() => (setLeaveOpen(false), setShowGallery(true))}
         />
         <CameraPanelDialog open={cameraPanel} onClose={() => setCameraPanel(false)} />
       </AppShell>

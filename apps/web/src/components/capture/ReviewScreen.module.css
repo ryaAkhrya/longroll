@@ -1,0 +1,55 @@
+.review {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px var(--page-pad) calc(18px + var(--safe-bottom));
+  background: var(--stage); color: #fff; overflow-y: auto;
+}
+.mine { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.title { margin: 0; font-size: clamp(30px, 5vw, 44px); line-height: 0.95; }
+.title :global(.s) { font-size: 1.04em; }
+.photo {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 62dvh; border-radius: 20px; overflow: hidden; background: var(--stage2);
+}
+.nameTag {
+  position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 4px;
+  border-radius: 999px; background: rgba(27, 23, 32, 0.6); backdrop-filter: blur(8px); font-size: 12px; font-weight: 700;
+}
+.live { position: absolute; inset: 0; }
+.bigNum { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(80px, 18vw, 140px); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5); pointer-events: none; }
+.liveTag, .liveTagSm {
+  position: absolute; right: 10px; top: 10px; padding: 3px 9px; border-radius: 999px; background: rgba(27, 23, 32, 0.6); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+}
+.liveTagSm { right: 8px; top: 8px; font-size: 10px; }
+.note { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center; font-weight: 600; }
+.note p { margin: 0; }
+.actions { display: flex; gap: 10px; }
+.retake { flex: 1; background: var(--stage2); color: #fff; }
+.accept { flex: 2; }
+.change { flex: 1; background: var(--stage2); color: #fff; }
+.actions :is(button) { min-height: 56px; }
+.caption { margin: 0; text-align: center; font-size: 12.5px; color: rgba(255, 255, 255, 0.6); }
+
+.others { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.othersHead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; color: rgba(255, 255, 255, 0.6); font-size: 12px; }
+.hint { text-align: right; }
+.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 16px; background: var(--stage2); min-width: 0; }
+.cardRetake { grid-column: 1 / -1; }
+.cardHead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+.cardHead :global(span:last-child) { margin-left: auto; }
+.cardBody { display: flex; gap: 8px; min-width: 0; }
+.rejected { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 34%; max-width: 160px; }
+.reject { position: relative; aspect-ratio: 4 / 3; border-radius: 10px; overflow: hidden; filter: grayscale(0.7) brightness(0.8); }
+.rejectTag { position: absolute; left: 4px; bottom: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); color: var(--ink); font-size: 10px; font-weight: 700; }
+.liveCard { position: relative; flex: 1; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--stage); }
+.smallNum { position: absolute; inset: 0; display: grid; place-items: center; font-size: 56px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); }
+.thumb { position: relative; flex: 1; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--stage); display: grid; place-items: center; }
+.wait { font-size: 12px; color: rgba(255, 255, 255, 0.6); padding: 8px; text-align: center; }
+.cardFoot { display: flex; gap: 6px; flex-wrap: wrap; }
+.cardFoot:empty { display: none; }
+
+@media (min-width: 1024px) {
+  .review { flex-direction: row; gap: 28px; padding: 18px 28px 22px; }
+  .mine { flex: 0 0 540px; }
+  .others { flex: 1; }
+  .photo { aspect-ratio: 1; max-height: none; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

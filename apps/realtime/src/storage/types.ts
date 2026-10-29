@@ -12,6 +12,8 @@ export interface PresignedPut {
 export interface ObjectStorage {
   readonly kind: string;
   list(prefix: string): Promise<string[]>;
+  /** roomId semua prefix `rooms/{roomId}/` yang punya objek (sweeper objek yatim, 15 §8.3). */
+  listRoomIds(): Promise<string[]>;
   /** Hapus maksimal 1000 key per panggilan (batas batch S3). */
   deleteMany(keys: string[]): Promise<void>;
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
@@ -27,6 +29,16 @@ export const DELETE_BATCH = 1000;
 
 export function roomPrefix(roomId: string): string {
   return `rooms/${roomId}/`;
+}
+
+/** roomId unik dari daftar key `rooms/{roomId}/...`. */
+export function roomIdsOf(keys: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const k of keys) {
+    const m = /^rooms\/([^/]+)\//.exec(k);
+    if (m) out.add(m[1]!);
+  }
+  return Array.from(out);
 }
 
 export function framePrefix(roomId: string): string {

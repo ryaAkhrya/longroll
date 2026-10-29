@@ -91,3 +91,8 @@ export function useFrameImage(code: string | null, frameId: string | null): { im
   }, [code, frameId]);
   return state.key === key ? { img: state.img, failed: state.failed } : { img: null, failed: false };
 }
+
+/** Versi non-hook (export): artwork frame custom sebagai gambar yang sudah ter-decode. */
+export function loadFrameImage(code: string, frameId: string): Promise<HTMLImageElement> {
+  return loadFrame(code, frameId).then((a) => a.img);
+}

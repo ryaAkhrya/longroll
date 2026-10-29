@@ -5,7 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { MODE_INFO, OUTPUT_PRESET_LABEL } from "@longroll/shared";
 import type { FrameRef, FrameTemplate, ParticipantView, RoomView, SessionView, StudioPatch } from "@longroll/shared";
+import { CAPTURE_CONFIG } from "@longroll/shared";
+import { useCapture } from "@/capture/useCapture";
+import { CountdownOverlay } from "@/components/capture/CountdownOverlay";
+import { ReviewScreen } from "@/components/capture/ReviewScreen";
 import { CameraSettings } from "@/components/media/CameraSettings";
+import { Banner } from "@/components/ui/Banner";
+import { Modal } from "@/components/ui/Modal";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { SheetSnap } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
@@ -51,6 +57,10 @@ const PANEL_TITLE: Record<Panel, string> = { frame: "Frame", upload: "Upload fra
 export function StudioContainer({ client, room, session, meId, clockOffsetMs, inviteUrl, onOpenCameraPanel }: StudioContainerProps) {
   const custom = room.customFrames;
   const { studio, send, lookup } = useStudio(client, session, meId, room.participants, custom);
+  const cap = useCapture(client, room, session, meId);
+  const capture = session.capture;
+  const shotActive = cap.shot?.state === "COUNTDOWN" || cap.shot?.state === "REVIEW";
+  const inReview = !!meId && !!capture && cap.shot?.state === "REVIEW" && !!cap.mine && cap.mine.status !== "NOT_REQUIRED" && cap.shot.required.includes(meId);
   const mobile = useMediaQuery("(max-width: 1023px)");
   const [panel, setPanel] = useState<Panel | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -59,6 +69,24 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
   const [editSlots, setEditSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [activity, setActivity] = useState<Map<string, string>>(new Map());
+
+  // Shortcut desktop (04 SCR-08): Space = shutter, Esc = Tunggu! — hanya bila fokus tidak di kontrol input.
+  const { arm, hold, canArm } = cap;
+  const stateNow = cap.shot?.state;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input, textarea, select, [contenteditable='true'], dialog, [role='dialog']") || t.tagName === "BUTTON")) return;
+      if (e.code === "Space" && canArm && !shotActive) {
+        e.preventDefault();
+        void arm(false);
+      } else if (e.key === "Escape" && stateNow === "COUNTDOWN") {
+        void hold();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [arm, hold, canArm, shotActive, stateNow]);
 
   const frames = useMemo(() => allFrames(custom), [custom]);
   const applied = studio.frame ? (lookup(studio.frame.frameId, studio.frame.source) ?? null) : null;
@@ -131,6 +159,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
       meId={meId}
       code={room.code}
       live={live}
+      capture={capture}
       editable={editable}
       onSlotsChange={(slots) => void send({ slots })}
       selectedSlotId={selectedSlot}
@@ -256,8 +285,9 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
     <BottomSheet
       open={toolsOpen}
       onClose={() => {
-        setToolsOpen(false);
+        // open(null) menetapkan toolsOpen dari nilai lama (true); tutup harus dieksekusi terakhir.
         open(null);
+        setToolsOpen(false);
       }}
       title={sheetTitle}
       snap={snap}
@@ -291,7 +321,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
     <>
       <span className={styles.pill}>{room.code}</span>
       <span className={styles.pill}>
-        {MODE_INFO[session.mode!].short} · 1/{studio.layout.shotCount}
+        {MODE_INFO[session.mode!].short} · {Math.min(cap.doneCount + 1, cap.shotCount)}/{studio.layout.shotCount}
         <span className={styles.progress} aria-hidden="true">
           {Array.from({ length: Math.min(8, studio.layout.shotCount) }, (_, i) => (
             <span key={i} />
@@ -301,7 +331,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
     </>
   );
 
-  return (
+  const screen = (
     <StudioScreen
       session={session}
       participants={room.participants}
@@ -315,17 +345,59 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
       drawer={drawer}
       center={center}
       summary={{ frame: frameName, layout: layoutText, onFrame: () => open("frame"), onLayout: () => open("layout") }}
-      shotLabel={`1/${studio.layout.shotCount}`}
+      shotLabel={`${Math.min(cap.doneCount + 1, cap.shotCount)}/${cap.shotCount}`}
+      shutter={{
+        disabled: !cap.canArm || shotActive,
+        onPress: () => void cap.arm(false),
+        label: `Ambil foto, hitung mundur ${studio.countdownSec} detik`,
+      }}
+      caption={cap.shot?.state === "REVIEW" && !inReview ? `Shot ${cap.shot.index + 1} lagi direview temen-temenmu…` : "Siapa aja boleh cekrek"}
+      barExtra={
+        <Button variant="secondary" size="md" aria-pressed={cap.waiting} onClick={() => cap.setWaiting(!cap.waiting)} data-testid="wait-toggle">
+          {cap.waiting ? "Siap!" : "Bentar"}
+        </Button>
+      }
+      overlay={
+        <>
+          {cap.shot?.state === "COUNTDOWN" && (
+            <CountdownOverlay
+              shot={cap.shot}
+              initiatorName={cap.shot.armedBy === meId ? "kamu" : (room.participants.find((p) => p.participantId === cap.shot!.armedBy)?.displayName ?? "temen")}
+              shotCount={cap.shotCount}
+              clockOffsetMs={clockOffsetMs}
+              onHold={() => void cap.hold()}
+            />
+          )}
+          {cap.doneBanner && (
+            <div className={styles.doneBanner} role="status">
+              <Banner tone="info">{cap.doneBanner.last ? "Semua shot beres! Masuk editor…" : `Shot ${cap.doneBanner.shotIndex + 1} beres! Lanjut shot ${cap.doneBanner.shotIndex + 2}.`}</Banner>
+            </div>
+          )}
+        </>
+      }
       timer={
-        <span className={styles.timer} title="Timer hadir di tahap berikutnya (P06)">
-          <span className={styles.timerDesk} role="group" aria-label="Timer (belum tersedia)">
-            {[3, 5, 10].map((s) => (
-              <button key={s} type="button" disabled className={cx(styles.timerItem, s === studio.countdownSec && styles.timerOn)}>
+        <span className={styles.timer}>
+          <span className={styles.timerDesk} role="group" aria-label="Timer countdown">
+            {CAPTURE_CONFIG.countdownChoices.map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={shotActive}
+                aria-pressed={s === studio.countdownSec}
+                onClick={() => void cap.setCountdown(s)}
+                className={cx(styles.timerItem, s === studio.countdownSec && styles.timerOn)}
+              >
                 {s} dtk
               </button>
             ))}
           </span>
-          <button type="button" disabled className={styles.dockBtn} aria-label="Timer — belum tersedia">
+          <button
+            type="button"
+            disabled={shotActive}
+            className={styles.dockBtn}
+            aria-label={`Timer ${studio.countdownSec}s, ketuk untuk ganti`}
+            onClick={() => void cap.setCountdown(studio.countdownSec === 3 ? 5 : studio.countdownSec === 5 ? 10 : 3)}
+          >
             <Timer size={18} {...iconProps} />
             <span>{studio.countdownSec}s</span>
           </button>
@@ -340,5 +412,56 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
       }
       mobileTools={mobileSheet}
     />
+  );
+
+  // Konfirmasi "n orang belum siap — tetap mulai?" (DEC-026): modal desktop / sheet mobile.
+  const confirm =
+    cap.confirmNotReady !== null ? (
+      mobile ? (
+        <BottomSheet open onClose={cap.dismissConfirm} title="Belum semua siap" snap="half" modal>
+          <p>{cap.confirmNotReady} orang belum siap — tetap mulai?</p>
+          <div className={styles.confirmActions}>
+            <Button variant="secondary" size="lg" onClick={cap.dismissConfirm}>
+              Tunggu dulu
+            </Button>
+            <Button variant="primary" size="lg" onClick={() => void cap.arm(true)}>
+              Tetap mulai
+            </Button>
+          </div>
+        </BottomSheet>
+      ) : (
+        <Modal
+          open
+          onClose={cap.dismissConfirm}
+          title="Belum semua siap"
+          footer={
+            <>
+              <Button variant="secondary" size="lg" onClick={cap.dismissConfirm}>
+                Tunggu dulu
+              </Button>
+              <Button variant="primary" size="lg" onClick={() => void cap.arm(true)}>
+                Tetap mulai
+              </Button>
+            </>
+          }
+        >
+          <p>{cap.confirmNotReady} orang belum siap — tetap mulai?</p>
+        </Modal>
+      )
+    ) : null;
+
+  if (inReview && capture && cap.shot && meId) {
+    return (
+      <>
+        <ReviewScreen cap={cap} code={room.code} capture={capture} shot={cap.shot} participants={room.participants} meId={meId} clockOffsetMs={clockOffsetMs} />
+        {confirm}
+      </>
+    );
+  }
+  return (
+    <>
+      {screen}
+      {confirm}
+    </>
   );
 }

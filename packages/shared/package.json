@@ -15,5 +15,9 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "fractional-indexing": "^4.0.0",
+    "yjs": "^13.6.33"
   }
 }

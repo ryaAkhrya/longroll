@@ -16,6 +16,8 @@ export interface SignedClaims {
 
 export class LocalUrlSigner {
   private readonly secret: Buffer;
+  /** Token PUT yang sudah dipakai (sekali pakai) → kedaluwarsanya; dibersihkan berkala, ukuran dibatasi. */
+  private readonly used = new Map<string, number>();
 
   constructor(
     /** Origin HTTP publik service realtime (bisa diset setelah listen, mis. port acak di tes). */
@@ -29,6 +31,21 @@ export class LocalUrlSigner {
     const body = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
     const mac = createHmac("sha256", this.secret).update(body).digest("base64url");
     return `${this.publicBaseUrl.replace(/\/$/, "")}/api/storage/${body}.${mac}`;
+  }
+
+  /** Lepas tanda terpakai (PUT gagal sebelum objek tertulis → klien boleh mengulang dengan URL yang sama selama TTL). */
+  release(token: string) {
+    this.used.delete(token);
+  }
+
+  /** Tandai token terpakai (juga selama PUT berjalan: dua PUT paralel tak bisa lolos bersamaan). false = replay. Hanya untuk PUT. */
+  consume(token: string, nowMs = Date.now()): boolean {
+    if (this.used.size > 10_000) for (const [t, exp] of this.used) if (exp <= nowMs) this.used.delete(t);
+    if (this.used.has(token)) return false;
+    const claims = this.verify(token, nowMs);
+    if (!claims) return false;
+    this.used.set(token, claims.e * 1000);
+    return true;
   }
 
   /** Verifikasi token (bagian path setelah /api/storage/). null bila palsu/kedaluwarsa. */

@@ -40,12 +40,17 @@ export function clearTokenCookie(config: ServerConfig, roomId: string): string {
   return tokenCookie(config, roomId, "", 0);
 }
 
-/** IP klien. X-Forwarded-For hanya dipercaya bila TRUST_PROXY=true (di belakang proxy milik sendiri). */
-export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
-  if (trustProxy) {
-    const xff = req.headers["x-forwarded-for"];
-    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
-    if (first) return first;
+/**
+ * IP klien. X-Forwarded-For HANYA dipercaya lewat proxy milik sendiri dan hanya entri yang ditambahkan proxy itu:
+ * dengan `hops` = N proxy tepercaya, IP klien = entri ke-N dari KANAN. Entri paling kiri dikirim klien sendiri dan
+ * bisa dipalsukan (bypass rate limit enumerasi) — tidak pernah dipakai. Tanpa XFF memadai → alamat socket.
+ */
+export function clientIp(req: IncomingMessage, hops: number): string {
+  if (hops > 0) {
+    const raw = req.headers["x-forwarded-for"];
+    const parts = (Array.isArray(raw) ? raw.join(",") : raw)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+    const ip = parts[parts.length - hops];
+    if (ip) return ip;
   }
   return req.socket.remoteAddress ?? "unknown";
 }
@@ -99,6 +104,17 @@ const STATUS: Record<ErrorCode, number> = {
   FRAME_DIMENSIONS: 422,
   FRAME_DECODE_FAILED: 422,
   FRAME_QUOTA: 409,
+  ALREADY_ARMED: 409,
+  TOO_LATE: 409,
+  CONFIRM_REQUIRED: 409,
+  NOT_REQUIRED: 409,
+  SHOT_DONE: 409,
+  ATTEMPT_REJECTED: 409,
+  UPLOAD_MISMATCH: 422,
+  SKIP_NOT_ALLOWED: 409,
+  ROOM_STORAGE_LIMIT: 413,
+  DOC_TOO_LARGE: 413,
+  READ_ONLY: 409,
   FRAME_NOT_FOUND: 404,
   SERVICE_UNAVAILABLE: 503,
 };

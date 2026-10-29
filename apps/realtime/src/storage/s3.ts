@@ -29,6 +29,12 @@ export class S3ObjectStorage implements ObjectStorage {
       region: cfg.region,
       forcePathStyle: cfg.forcePathStyle,
       credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
+      // Storage lambat/mati tidak boleh menahan actor tanpa batas: timeout + retry terbatas (backoff SDK).
+      maxAttempts: 3,
+      requestHandler: { connectionTimeout: 5_000, requestTimeout: 20_000 },
+      // Penyedia S3-compatible tidak selalu mendukung checksum CRC32 default SDK baru.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
   }
 
@@ -41,6 +47,20 @@ export class S3ObjectStorage implements ObjectStorage {
       token = r.IsTruncated ? r.NextContinuationToken : undefined;
     } while (token);
     return keys;
+  }
+
+  async listRoomIds() {
+    const ids: string[] = [];
+    let token: string | undefined;
+    do {
+      const r = await this.client.send(new ListObjectsV2Command({ Bucket: this.cfg.bucket, Prefix: "rooms/", Delimiter: "/", ContinuationToken: token }));
+      for (const p of r.CommonPrefixes ?? []) {
+        const m = /^rooms\/([^/]+)\/$/.exec(p.Prefix ?? "");
+        if (m) ids.push(m[1]!);
+      }
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return ids;
   }
 
   async deleteMany(keys: string[]) {
@@ -81,6 +101,11 @@ export class S3ObjectStorage implements ObjectStorage {
   }
 
   presignGet(key: string, expiresSec: number) {
-    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.cfg.bucket, Key: key }), { expiresIn: expiresSec });
+    // Respons ditandatangani: tampil inline sebagai gambar, cache privat singkat (URL sendiri sudah kedaluwarsa ≤ 10 menit).
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.cfg.bucket, Key: key, ResponseContentDisposition: "inline", ResponseCacheControl: "private, max-age=300" }),
+      { expiresIn: expiresSec },
+    );
   }
 }

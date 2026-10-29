@@ -21,6 +21,9 @@ export class MemoryRoomStore implements RoomStore {
   private rooms = new Map<string, RoomState>();
   private events = new Map<string, S2C[]>();
   private limits = new Map<string, { hits: number; expiresAt: number }>();
+  private editorDocs = new Map<string, { roomId: string; doc: Uint8Array }>();
+  /** Tes: jumlah penulisan snapshot editor (memverifikasi throttle penulisan). */
+  editorWrites = 0;
   /** Tes: simulasi database tidak tersedia. */
   failing = false;
 
@@ -76,6 +79,18 @@ export class MemoryRoomStore implements RoomStore {
     return { state: structuredClone(state), events: structuredClone(this.events.get(roomId) ?? []) };
   }
 
+  async saveEditorDoc(roomId: string, sessionId: string, doc: Uint8Array) {
+    this.guard();
+    this.editorWrites++;
+    this.editorDocs.set(sessionId, { roomId, doc: new Uint8Array(doc) });
+  }
+
+  async loadEditorDoc(sessionId: string) {
+    this.guard();
+    const d = this.editorDocs.get(sessionId);
+    return d ? new Uint8Array(d.doc) : null;
+  }
+
   async listRecoverableRooms() {
     this.guard();
     return Array.from(this.rooms.values())
@@ -87,15 +102,21 @@ export class MemoryRoomStore implements RoomStore {
     this.guard();
     this.rooms.delete(roomId);
     this.events.delete(roomId);
+    for (const [sid, d] of this.editorDocs) if (d.roomId === roomId) this.editorDocs.delete(sid);
     const row = this.codes.get(code);
     if (!row || row.roomId === roomId || row.state === "TOMBSTONE") {
       this.codes.set(code, { roomId: null, state: "TOMBSTONE", tombstoneUntil: Date.now() + tombstoneSeconds * 1000, createdAt: Date.now() });
     }
   }
 
+  async existingRoomIds(roomIds: string[]) {
+    this.guard();
+    return new Set(roomIds.filter((id) => this.rooms.has(id)));
+  }
+
   async countRoomData(roomId: string) {
     this.guard();
-    return (this.rooms.has(roomId) ? 1 : 0) + (this.events.get(roomId)?.length ?? 0);
+    return (this.rooms.has(roomId) ? 1 : 0) + (this.events.get(roomId)?.length ?? 0) + Array.from(this.editorDocs.values()).filter((d) => d.roomId === roomId).length;
   }
 
   async hit(key: string, windowSeconds: number) {

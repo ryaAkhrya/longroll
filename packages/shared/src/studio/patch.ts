@@ -4,6 +4,7 @@ import { generatePlan, planFromHoles } from "./generate";
 import type { PlanInput, QualityWarning, SafeguardViolation } from "./generate";
 import { STUDIO_LIMITS } from "./limits";
 import { validateLayout } from "./validate";
+import { isCountdownChoice } from "../capture";
 import {
   ARRANGEMENTS,
   BINDING_STRATEGIES,
@@ -108,7 +109,7 @@ export function initStudio(mode: Mode, participantSlots: ParticipantSlot[]): Stu
 export function sanitizePatch(raw: unknown): StudioPatch | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const p = raw as Record<string, unknown>;
-  const allowed = new Set(["frame", "bindingStrategy", "arrangement", "shotCount", "slotRatio", "output", "slots", "style"]);
+  const allowed = new Set(["frame", "bindingStrategy", "arrangement", "shotCount", "slotRatio", "output", "slots", "style", "countdownSec"]);
   if (Object.keys(p).some((k) => !allowed.has(k))) return null;
   const out: StudioPatch = {};
   if (p.frame !== undefined) {
@@ -163,6 +164,10 @@ export function sanitizePatch(raw: unknown): StudioPatch | null {
     }
     out.slots = slots;
   }
+  if (p.countdownSec !== undefined) {
+    if (!isCountdownChoice(p.countdownSec)) return null;
+    out.countdownSec = p.countdownSec;
+  }
   if (p.style !== undefined) {
     const st = p.style as Record<string, unknown>;
     if (!st || typeof st !== "object" || Array.isArray(st)) return null;
@@ -200,12 +205,14 @@ export function patchFields(patch: StudioPatch): StudioField[] {
   if (patch.output !== undefined) f.push("output");
   if (patch.slots !== undefined) f.push("slots");
   for (const k of Object.keys(patch.style ?? {})) f.push(`style.${k}` as StudioField);
+  if (patch.countdownSec !== undefined) f.push("countdownSec");
   return f;
 }
 
 function changeKind(fields: StudioField[]): ChangeKind {
   if (fields.every((f) => f === "frame")) return "frame";
   if (fields.every((f) => f === "style.filterPreset")) return "filter";
+  if (fields.every((f) => f === "countdownSec")) return "timer";
   if (fields.includes("bindingStrategy")) return "strategy";
   if (fields.every((f) => f === "slots")) return "slots";
   if (fields.some((f) => STRUCTURE_FIELDS.includes(f))) return "layout";
@@ -251,6 +258,7 @@ export function applyStudioPatch(studio: StudioState, patch: StudioPatch, baseVe
   }
   if (patch.style) next.style = { ...next.style, ...patch.style };
   if (patch.bindingStrategy) next.bindingStrategy = patch.bindingStrategy;
+  if (patch.countdownSec !== undefined) next.countdownSec = patch.countdownSec;
 
   const hole = holeFrame(next.frame, ctx);
   const structural = fields.some((f) => STRUCTURE_FIELDS.includes(f)) || (hole?.id ?? null) !== holeBefore;
@@ -309,6 +317,7 @@ export function applyStudioPatch(studio: StudioState, patch: StudioPatch, baseVe
   if (patch.frame !== undefined) prev.frame = structuredClone(studio.frame);
   if (patch.style) prev.style = structuredClone(studio.style);
   if (patch.bindingStrategy) prev.bindingStrategy = studio.bindingStrategy;
+  if (patch.countdownSec !== undefined) prev.countdownSec = studio.countdownSec;
   if (JSON.stringify(next.layout) !== JSON.stringify(studio.layout)) prev.layout = structuredClone(studio.layout);
   bumpVersion(studio, next, fields, { changeId: ctx.changeId, by: ctx.by, atMs: ctx.nowMs, kind: changeKind(fields), fields, overwrote }, { changeId: ctx.changeId, prev });
   const warnings = generateWarnings(ctx, next);
@@ -335,6 +344,10 @@ export function revertStudio(studio: StudioState, changeId: string, ctx: StudioC
   if (undo.prev.style) {
     prev.style = structuredClone(studio.style);
     next.style = structuredClone(undo.prev.style);
+  }
+  if (undo.prev.countdownSec !== undefined) {
+    prev.countdownSec = studio.countdownSec;
+    next.countdownSec = undo.prev.countdownSec;
   }
   if (undo.prev.bindingStrategy) {
     prev.bindingStrategy = studio.bindingStrategy;

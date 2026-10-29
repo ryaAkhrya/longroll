@@ -1,0 +1,11 @@
+.body { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--ink2); }
+.peers { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.peer { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink); }
+.peerName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peerStatus { font-size: 13px; color: var(--ink2); }
+.peer[data-status="join"] .peerStatus { color: var(--ink); font-weight: 600; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+@media (max-width: 1023px) {
+  .actions { flex-direction: column-reverse; }
+  .actions > * { width: 100%; }
+}

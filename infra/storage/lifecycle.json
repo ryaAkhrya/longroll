@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "longroll-rooms-24h-backstop",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "rooms/" },
+      "Expiration": { "Days": 1 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

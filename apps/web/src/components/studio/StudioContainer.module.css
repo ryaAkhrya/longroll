@@ -59,3 +59,7 @@
   .timerDesk { display: inline-flex; }
   .timer > .dockBtn { display: none; }
 }
+
+.doneBanner { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 9; max-width: calc(100% - 32px); }
+.confirmActions { display: flex; gap: 10px; margin-top: 16px; }
+.confirmActions > * { flex: 1; }

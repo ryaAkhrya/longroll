@@ -1,4 +1,5 @@
 import { LocalUrlSigner } from "./signer";
+import { roomIdsOf } from "./types";
 import type { ObjectStorage } from "./types";
 
 /** Storage di memori (tes/dev). URL bertanda tangan disajikan service realtime (`/api/storage`). */
@@ -14,6 +15,10 @@ export class MemoryObjectStorage implements ObjectStorage {
 
   async list(prefix: string) {
     return Array.from(this.objects.keys()).filter((k) => k.startsWith(prefix));
+  }
+
+  async listRoomIds() {
+    return roomIdsOf(this.objects.keys());
   }
 
   async deleteMany(keys: string[]) {

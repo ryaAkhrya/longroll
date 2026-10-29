@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
 import "@/styles/globals.css";
@@ -16,7 +17,10 @@ export const viewport: Viewport = {
   themeColor: "#F6F3EE",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // CSP bernonce (proxy.ts): membaca headers() membuat seluruh halaman dirender dinamis per-request sehingga Next
+  // dapat memasang nonce pada skrip inline-nya. Nilainya sendiri dibaca Next dari header CSP.
+  await headers();
   return (
     <html lang="id" data-scroll-behavior="smooth">
       <head>

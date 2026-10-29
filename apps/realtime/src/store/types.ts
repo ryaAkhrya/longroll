@@ -65,6 +65,11 @@ export interface RoomStore {
   listRecoverableRooms(): Promise<{ roomId: string; code: string }[]>;
   /** Satu transaksi: hapus semua data room (cascade) + tulis tombstone kode. Idempoten. */
   finalizeExpiredRoom(roomId: string, code: string, tombstoneSeconds: number): Promise<void>;
+  /** Snapshot dokumen editor (Yjs) per sesi — ditulis jarang (≥ 5 detik), awareness tak pernah. */
+  saveEditorDoc(roomId: string, sessionId: string, doc: Uint8Array): Promise<void>;
+  loadEditorDoc(sessionId: string): Promise<Uint8Array | null>;
+  /** Subset `roomIds` yang masih punya baris room (sweeper objek yatim). Bukan-UUID = tidak ada. */
+  existingRoomIds(roomIds: string[]): Promise<Set<string>>;
   /** Jumlah baris tersisa milik room (verifikasi cleanup, harus 0). */
   countRoomData(roomId: string): Promise<number>;
   /** Counter fixed-window; mengembalikan nilai setelah increment. */

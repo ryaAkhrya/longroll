@@ -24,7 +24,7 @@ export function CopyCodeButton({ code, className }: CopyCodeButtonProps) {
   };
   return (
     <button type="button" className={cx(styles.codePill, className)} onClick={copy} aria-label={`Salin kode room ${code}`}>
-      <span className={styles.codeLabel}>Room</span>
+      <span className={styles.codeLabel}>Room</span>{" "}
       <span className={cx("tnum", styles.codeValue)}>{code}</span>
       <Copy size={13} {...iconProps} />
     </button>

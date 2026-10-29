@@ -1,0 +1,27 @@
+.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px minmax(0, 1fr) 300px; gap: 12px; padding: 12px 20px 16px; background: var(--bg); }
+.rail { display: flex; flex-direction: column; gap: 6px; }
+.railItem { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border: 0; border-radius: 13px; background: transparent; color: var(--ink2); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.railItem:hover { background: var(--sunk); }
+.railOn, .railOn:hover { background: var(--lav); color: var(--plum); }
+.center { position: relative; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.bar { display: flex; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.banners { display: flex; flex-direction: column; gap: 8px; }
+.canvasBox { position: relative; flex: 1; min-height: 360px; border-radius: 20px; overflow: hidden; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line); }
+.zoom { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 14px; background: var(--surface); box-shadow: var(--sh2); font-size: 13px; font-weight: 700; }
+.side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 22px; background: var(--surface); box-shadow: var(--sh1); }
+.divider { border-top: 1px solid var(--line); padding-top: 14px; }
+.divider:empty { display: none; }
+
+.mobile { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sunk); }
+.mTop { position: absolute; left: 12px; right: 12px; top: 10px; z-index: 4; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(10px); box-shadow: var(--sh2); }
+.mCanvas { position: absolute; inset: 0; }
+.dock { position: absolute; left: 50%; bottom: calc(14px + var(--safe-bottom)); transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 16px; background: var(--surface); box-shadow: var(--sh2); max-width: calc(100% - 24px); }
+.dockClosed { padding: 2px; }
+.dockItem { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 48px; min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--ink2); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+.dockOn { background: var(--lav); color: var(--plum); }
+.dockToggle { display: grid; place-items: center; width: 40px; min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--ink2); cursor: pointer; }
+
+@media (max-width: 1023px) {
+  .banners { position: absolute; left: 12px; right: 12px; top: 76px; z-index: 4; }
+}

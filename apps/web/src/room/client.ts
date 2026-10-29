@@ -1,5 +1,6 @@
-import { PROTOCOL_VERSION, RECONNECT, ROOM_DEFAULTS, WS_CLOSE } from "@longroll/shared";
+import { PROTOCOL_VERSION, RECONNECT, ROOM_DEFAULTS, WS_CLOSE, clockSample, computeClockOffset } from "@longroll/shared";
 import type {
+  ClockSample,
   AckPayload,
   AuthOkPayload,
   CursorPayload,
@@ -99,6 +100,11 @@ export function applyEvent(room: RoomView, event: Pick<S2C, "type" | "payload" |
       if (cur && cur.sessionId === sessionId && (!cur.studio || studio.version >= cur.studio.version)) next.activeSession = { ...cur, studio };
       break;
     }
+    case "capture.state": {
+      const cur = next.activeSession;
+      if (cur && cur.sessionId === e.payload.sessionId) next.activeSession = { ...cur, capture: e.payload.capture };
+      break;
+    }
     case "frame.added": {
       const list = next.customFrames ?? [];
       if (!list.some((f) => f.frameId === e.payload.frame.frameId)) next.customFrames = [...list, e.payload.frame];
@@ -120,6 +126,12 @@ export class RoomClient {
   private state: RoomClientState = { status: "connecting", room: null, me: null, lastSeq: 0, attempt: 0, clockOffsetMs: 0 };
   private listeners = new Set<() => void>();
   private eventListeners = new Set<(e: RoomClientEvent) => void>();
+  /** Sinkron jam (DEC-074): 5 sampel ping-pong, median, buang rtt > 2× median. */
+  private syncPending = new Set<number>();
+  private syncSamples: ClockSample[] = [];
+  private syncTimers: ReturnType<typeof setTimeout>[] = [];
+  private syncInterval: ReturnType<typeof setInterval> | null = null;
+  private lastT1 = 0;
   private signalListeners = new Set<(type: string, payload: unknown) => void>();
   private ws: WebSocket | null = null;
   private stopped = false;
@@ -227,6 +239,11 @@ export class RoomClient {
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.retryTimer = this.heartbeat = this.refreshTimer = null;
+    if (this.syncInterval) clearInterval(this.syncInterval);
+    this.syncInterval = null;
+    for (const t of this.syncTimers) clearTimeout(t);
+    this.syncTimers = [];
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.onVisible);
   }
 
   private terminal(status: Extract<ConnectionStatus, "replaced" | "expired" | "unauthorized" | "left">) {
@@ -277,6 +294,8 @@ export class RoomClient {
       this.ws = null;
       if (this.heartbeat) clearInterval(this.heartbeat);
       this.heartbeat = null;
+      for (const t of this.syncTimers) clearTimeout(t);
+      this.syncTimers = [];
       this.onClose(ev.code);
     };
   }
@@ -331,6 +350,7 @@ export class RoomClient {
         });
         this.resumeRequested = false;
         this.startHeartbeat();
+        this.startClockSync();
         for (const [id, intent] of this.pending) this.transmit(id, intent);
         return;
       }
@@ -346,9 +366,16 @@ export class RoomClient {
         return this.terminal("expired");
       case "time.pong": {
         const { t1, ts } = msg.payload as { t1: number | null; ts: number };
-        if (typeof t1 === "number") this.set({ clockOffsetMs: Math.round(ts - (t1 + Date.now()) / 2) });
+        if (typeof t1 === "number" && this.syncPending.delete(t1)) this.onClockSample(clockSample(t1, ts, Date.now()));
         return;
       }
+      case "nudge":
+      case "result.render.request":
+      case "editor.update":
+      case "editor.reset":
+      case "editor.awareness":
+        for (const fn of this.signalListeners) fn(msg.type, msg.payload);
+        return;
       case "rtc.offer":
       case "rtc.answer":
       case "rtc.ice":
@@ -401,6 +428,53 @@ export class RoomClient {
     }
     for (const fn of this.eventListeners) fn({ type: e.type, payload: e.payload, atMs: msg.atMs });
   }
+
+  /** Perkiraan waktu server sekarang (ms epoch server). */
+  serverNow(): number {
+    return Date.now() + this.state.clockOffsetMs;
+  }
+
+  /** Mulai satu putaran sinkron jam (5 sampel, 150 ms terpisah). Aman dipanggil berulang. */
+  syncClock() {
+    for (const t of this.syncTimers) clearTimeout(t);
+    this.syncTimers = [];
+    this.syncPending.clear();
+    this.syncSamples = [];
+    for (let i = 0; i < 5; i++) {
+      this.syncTimers.push(
+        setTimeout(() => {
+          if (this.ws?.readyState !== WebSocket.OPEN) return;
+          const t1 = Math.max(Date.now(), this.lastT1 + 1);
+          this.lastT1 = t1;
+          this.syncPending.add(t1);
+          this.ws.send(JSON.stringify({ type: "time.ping", payload: { t1 } }));
+        }, i * 150),
+      );
+    }
+  }
+
+  private onClockSample(sample: ClockSample) {
+    this.syncSamples.push(sample);
+    if (this.syncSamples.length < 5) return;
+    const offset = computeClockOffset(this.syncSamples);
+    this.syncSamples = [];
+    if (offset !== null) this.set({ clockOffsetMs: offset });
+  }
+
+  private startClockSync() {
+    if (this.syncInterval) clearInterval(this.syncInterval);
+    this.syncClock();
+    this.syncInterval = setInterval(() => this.syncClock(), 30_000);
+    // SY-04: sleep/wake mengubah jam → sinkron ulang saat tab kembali terlihat.
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisible);
+      document.addEventListener("visibilitychange", this.onVisible);
+    }
+  }
+
+  private onVisible = () => {
+    if (document.visibilityState === "visible") this.syncClock();
+  };
 
   private startHeartbeat() {
     if (this.heartbeat) clearInterval(this.heartbeat);

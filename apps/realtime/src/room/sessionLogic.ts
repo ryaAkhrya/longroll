@@ -1,7 +1,8 @@
 import { randomInt } from "node:crypto";
-import { MODES, SESSION_CONFIG, canCloseVoting, everyoneVoted, newVoting, publicStudio, resolveVotes, votingOpen } from "@longroll/shared";
+import { MODES, SESSION_CONFIG, canCloseVoting, everyoneVoted, newVoting, publicCapture, publicResult, publicStudio, resolveVotes, votingOpen } from "@longroll/shared";
 import type { Mode, RoomEvent, SessionView } from "@longroll/shared";
 import { uuidv7 } from "../security";
+import { buildResult } from "./results";
 import { RoomError } from "./types";
 import type { RoomState } from "./types";
 
@@ -27,8 +28,13 @@ export function connectedIds(state: RoomState, hasSocket: (pid: string) => boole
     .map((p) => p.participantId);
 }
 
+/** SessionView untuk klien: tanpa nilai undo studio & tanpa key object storage attempt. */
+export function publicSession(s: SessionView): SessionView {
+  return { ...structuredClone(s), studio: publicStudio(s.studio), capture: publicCapture(structuredClone(s.capture)), result: publicResult(structuredClone(s.result)) };
+}
+
 export function emitSession(draft: RoomState, emit: Emit, session: SessionView) {
-  emit({ type: "session.state", payload: { session: { ...structuredClone(session), studio: publicStudio(session.studio) }, sessionCount: draft.sessionOrder.length } });
+  emit({ type: "session.state", payload: { session: publicSession(session), sessionCount: draft.sessionOrder.length } });
 }
 
 /** `session.create` (DEC-063): hanya jika belum ada sesi atau sesi aktif sudah FINAL/CLOSED; batas 20 (DEC-053). */
@@ -51,6 +57,8 @@ export function createSession(draft: RoomState, emit: Emit, by: string, nowMs: n
     lockedAtMs: null,
     voting: newVoting(),
     studio: null,
+    capture: null,
+    result: null,
     eventLog: [{ atMs: nowMs, type: "CREATED", by }],
   };
   draft.sessions[session.sessionId] = session;
@@ -59,6 +67,31 @@ export function createSession(draft: RoomState, emit: Emit, by: string, nowMs: n
   emitSession(draft, emit, session);
   emit({ type: "session.invite", payload: { sessionId: session.sessionId, index: session.index, from: by } });
   return session;
+}
+
+/** session.finalize (DEC-059): siapa pun, idempoten; EDITING -> FINAL. */
+export function finalizeSession(draft: RoomState, emit: Emit, by: string, payload: unknown, nowMs: number) {
+  const p = (payload ?? {}) as { sessionId?: unknown };
+  const s = activeSession(draft);
+  if (!s || s.sessionId !== p.sessionId) throw new RoomError("NOT_IN_STUDIO");
+  if (s.state === "FINAL") return;
+  if (s.state !== "EDITING") throw new RoomError("NOT_IN_STUDIO");
+  s.state = "FINAL";
+  s.result = buildResult(draft, s, by, nowMs);
+  s.eventLog.push({ atMs: nowMs, type: "FINAL", by });
+  emitSession(draft, emit, s);
+}
+
+/** session.reopen ("Balik edit"): FINAL -> EDITING; dokumen tetap sama. */
+export function reopenSession(draft: RoomState, emit: Emit, by: string, payload: unknown, nowMs: number) {
+  const p = (payload ?? {}) as { sessionId?: unknown };
+  const s = activeSession(draft);
+  if (!s || s.sessionId !== p.sessionId) throw new RoomError("NOT_IN_STUDIO");
+  if (s.state === "EDITING") return;
+  if (s.state !== "FINAL") throw new RoomError("NOT_IN_STUDIO");
+  s.state = "EDITING";
+  s.eventLog.push({ atMs: nowMs, type: "REOPENED", by });
+  emitSession(draft, emit, s);
 }
 
 function requireVoting(draft: RoomState, sessionId: unknown, round: unknown): SessionView {

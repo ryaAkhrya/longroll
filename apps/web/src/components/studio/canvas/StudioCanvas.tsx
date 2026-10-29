@@ -3,8 +3,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Layer, Line, Rect, Shape, Stage, Text, Transformer } from "react-konva";
-import { FONT_STACK, PLACEHOLDER_TINT, STUDIO_LIMITS, buildScene, formatDate } from "@longroll/shared";
-import type { FrameTemplate, ParticipantView, Scene, SceneDecor, SceneSlot, SlotGeometry, StudioState } from "@longroll/shared";
+import { FONT_STACK, PLACEHOLDER_TINT, STUDIO_LIMITS, acceptedForCell, buildScene, formatDate } from "@longroll/shared";
+import { AttemptImage } from "@/capture/AttemptImage";
+import type { CaptureState, FrameTemplate, ParticipantView, Scene, SceneDecor, SceneSlot, SlotGeometry, StudioState } from "@longroll/shared";
 import { VideoView } from "@/components/media/VideoView";
 import { useMedia } from "@/media/MediaProvider";
 import { cx } from "@/lib/cx";
@@ -26,6 +27,8 @@ export interface StudioCanvasProps {
   selectedSlotId?: string | null;
   onSelectSlot?: (id: string | null) => void;
   label: string;
+  /** P06: foto accepted per sel (shot DONE) menggantikan feed live di slotnya. */
+  capture?: CaptureState | null;
   className?: string;
   /** Tanggal dekor (default: hari ini). */
   dateMs?: number;
@@ -111,7 +114,7 @@ export function StudioCanvas(props: StudioCanvasProps) {
             </Layer>
           </Stage>
 
-          {live && <Photos scene={scene} scale={scale} participants={participants} meId={meId} />}
+          {live && <Photos scene={scene} scale={scale} participants={participants} meId={meId} code={code} capture={props.capture ?? null} />}
           {!live && <div className={styles.thumbFilter} style={{ backdropFilter: scene.filter === "none" ? undefined : scene.filter }} />}
 
           <Stage width={dw} height={dh} className={cx(styles.layer, !editable && styles.passive)}>
@@ -165,7 +168,7 @@ function center(s: SceneSlot) {
   return { x: s.x + s.w / 2, y: s.y + s.h / 2, offsetX: s.w / 2, offsetY: s.h / 2, rotation: s.rotation };
 }
 
-function Background({ scene, scale }: { scene: Scene; scale: number }) {
+export function Background({ scene, scale }: { scene: Scene; scale: number }) {
   const bg = scene.background;
   const W = scene.width;
   const H = scene.height;
@@ -230,7 +233,7 @@ function roundRect(ctx: Konva.Context, w: number, h: number, r: number) {
   ctx.closePath();
 }
 
-function Decor({ d }: { d: SceneDecor }) {
+export function Decor({ d }: { d: SceneDecor }) {
   if (d.kind === "rect") return <Rect x={d.x + d.w / 2} y={d.y + d.h / 2} offsetX={d.w / 2} offsetY={d.h / 2} width={d.w} height={d.h} fill={d.fill} cornerRadius={d.radius} rotation={d.rotation} opacity={d.opacity} />;
   if (d.kind === "mark") {
     const s = d.size / 4;
@@ -263,7 +266,7 @@ function Decor({ d }: { d: SceneDecor }) {
 }
 
 /** Feed live per sub-tile: video DOM (bukan Konva) supaya decode tetap di jalur video browser (RK-01). */
-function Photos({ scene, scale, participants, meId }: { scene: Scene; scale: number; participants: ParticipantView[]; meId: string | null }) {
+function Photos({ scene, scale, participants, meId, code, capture }: { scene: Scene; scale: number; participants: ParticipantView[]; meId: string | null; code: string | null; capture: CaptureState | null }) {
   const media = useMedia();
   const byColor = new Map(participants.filter((p) => p.connection !== "LEFT").map((p) => [p.color as string, p]));
   return (
@@ -281,6 +284,20 @@ function Photos({ scene, scale, participants, meId }: { scene: Scene; scale: num
               style={{ left: s.photo.x * scale, top: s.photo.y * scale, width: s.photo.w * scale, height: s.photo.h * scale, borderRadius: s.photo.radius * scale }}
             >
               {s.tiles.map((t, i) => {
+                const acceptedId = t.participantSlot && capture ? acceptedForCell(capture, t.shotIndex, t.participantSlot) : null;
+                if (acceptedId && code) {
+                  // Shot selesai: foto accepted milik peserta (bukan feed live) — slot menampilkan hasil nyata.
+                  return (
+                    <div
+                      key={i}
+                      className={styles.tile}
+                      data-accepted={acceptedId}
+                      style={{ left: t.x * scale, top: t.y * scale, width: t.w * scale, height: t.h * scale, filter: scene.filter === "none" ? undefined : scene.filter }}
+                    >
+                      <AttemptImage code={code} attemptId={acceptedId} alt={`Foto shot ${t.shotIndex + 1}`} />
+                    </div>
+                  );
+                }
                 const p = t.participantSlot ? byColor.get(t.participantSlot) : undefined;
                 if (!p) return null;
                 const self = p.participantId === meId;

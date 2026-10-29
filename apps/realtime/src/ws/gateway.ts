@@ -2,17 +2,20 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
-import { isCompleteRoomCode, normalizeRoomCode, PROTOCOL_VERSION, RATE_LIMITS, RTC_SIGNAL_TYPES, WS_CLOSE, WS_MAX_MESSAGE_BYTES } from "@longroll/shared";
+import { isCompleteRoomCode, normalizeRoomCode, PROTOCOL_VERSION, RATE_LIMITS, RTC_SIGNAL_TYPES, WS_CLOSE, WS_MAX_EDITOR_MESSAGE_BYTES, WS_MAX_MESSAGE_BYTES } from "@longroll/shared";
 import type { C2S, CursorPayload, CursorSurface, RtcSignal, RtcSignalType, S2C } from "@longroll/shared";
 import type { ServerConfig } from "../config";
+import { padTo } from "../guard/timing";
+import { ByteBucket } from "../guard/limiter";
+import type { RateLimiter } from "../http/rateLimit";
 import { clientIp, isAllowedOrigin, tokenFromCookie } from "../http/util";
-import { log } from "../log";
+import { errText, log, metrics } from "../log";
 import type { RoomActor } from "../room/RoomActor";
 import type { RoomManager } from "../room/RoomManager";
 import type { RoomConnection } from "../room/types";
 
 const SURFACES: readonly CursorSurface[] = ["vote", "studio", "editor", "lobby"];
-const VOLATILE = new Set(["cursor.move", "time.ping", "presence.activity", ...RTC_SIGNAL_TYPES]);
+const VOLATILE = new Set(["cursor.move", "time.ping", "presence.activity", "editor.awareness", ...RTC_SIGNAL_TYPES]);
 /** Bucket terpisah untuk sinyal WebRTC: burst kandidat ICE tidak boleh memakan jatah intent. */
 const RTC_PER_SECOND = 100;
 const RTC_BURST = 200;
@@ -26,6 +29,8 @@ class WsConnection implements RoomConnection {
   private rtcTokens = RTC_BURST;
   private rtcRefillAt = Date.now();
   violations = 0;
+  /** Update Yjs besar: batas 1 MB/detik (burst 2 MB) per koneksi; 60 pesan/detik saja tidak cukup (60 × 256 KB). */
+  readonly editorBytes = new ByteBucket(1024 * 1024, 2 * 1024 * 1024);
 
   constructor(readonly ws: WebSocket) {}
 
@@ -114,8 +119,8 @@ function parseCursor(payload: unknown): CursorPayload | null {
  * batas 64 KB/pesan, 60 event/detik, heartbeat, takeover multi-tab di actor.
  * Tidak ada mode token di query string; fallback `auth` sengaja tidak diaktifkan (lihat README).
  */
-export function createGateway(config: ServerConfig, manager: RoomManager) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_MESSAGE_BYTES });
+export function createGateway(config: ServerConfig, manager: RoomManager, limiter: RateLimiter) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_EDITOR_MESSAGE_BYTES });
   const perIp = new Map<string, number>();
   const live = new Set<WsConnection>();
 
@@ -140,6 +145,8 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
       return conn.close(1003, "bad json");
     }
     if (!msg || typeof msg.type !== "string") return conn.close(1003, "bad message");
+    // Hanya pesan editor.* yang boleh > 64 KB (update Yjs); selainnya ditolak (14 8.2).
+    if (raw.length > WS_MAX_MESSAGE_BYTES && !msg.type.startsWith("editor.")) return conn.close(1009, "too big");
     const clientEventId =
       typeof msg.clientEventId === "string" && msg.clientEventId.length <= MAX_CLIENT_EVENT_ID ? msg.clientEventId : undefined;
 
@@ -147,6 +154,16 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
       if (!conn.takeRtc()) return;
       const signal = parseRtc(msg.type as RtcSignalType, msg.payload);
       if (signal) actor.relayRtc(participantId, msg.type as RtcSignalType, signal);
+      return;
+    }
+
+    if (msg.type.startsWith("editor.") && !conn.editorBytes.take(raw.length)) {
+      conn.violations++;
+      metrics.inc("ws_editor_bytes_limited_total");
+      if (conn.violations > 120) return conn.close(WS_CLOSE.RATE_LIMITED, "rate limited");
+      if (msg.type !== "editor.awareness" && clientEventId) {
+        conn.send({ type: "ack", atMs: Date.now(), replyTo: clientEventId, payload: { ok: false, error: "RATE_LIMITED" } });
+      }
       return;
     }
 
@@ -175,6 +192,11 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
         if (cursor) actor.relayCursor(participantId, cursor);
         return;
       }
+      case "editor.awareness": {
+        const p = (msg.payload ?? {}) as { sessionId?: unknown; state?: unknown };
+        if (typeof p.sessionId === "string") actor.relayEditorAwareness(participantId, p.sessionId, p.state);
+        return;
+      }
       case "presence.activity": {
         const a = (msg.payload as { activity?: unknown } | undefined)?.activity;
         actor.relayActivity(participantId, typeof a === "string" ? a.slice(0, 80) : null);
@@ -188,26 +210,47 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
   }
 
   async function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
+    const started = Date.now();
     const url = new URL(req.url ?? "/", "http://internal");
     if (url.pathname !== "/ws") return reject(socket, 404, "Not Found");
     if (!isAllowedOrigin(config, req.headers.origin)) return reject(socket, 403, "Forbidden");
 
     const ip = clientIp(req, config.trustProxy);
     if ((perIp.get(ip) ?? 0) >= RATE_LIMITS.wsConnectionsPerIp) return reject(socket, 429, "Too Many Requests");
+    // Percobaan upgrade (sukses atau gagal) dibatasi per IP di memori; sambung ulang normal jauh di bawah batas ini.
+    if (!limiter.general("upgrade", ip).ok) {
+      metrics.inc("ws_upgrade_limited_total");
+      return reject(socket, 429, "Too Many Requests");
+    }
 
+    // Jalur WS tidak boleh jadi oracle enumerasi kode (TH-01): kode salah dihitung bersama HTTP (DEC-067),
+    // dan semua penolakan 404/410/401 memakai waktu respons minimum yang sama.
     const code = normalizeRoomCode(url.searchParams.get("code") ?? "");
-    if (!isCompleteRoomCode(code)) return reject(socket, 404, "Not Found");
     let found;
     try {
-      found = await manager.lookup(code);
+      if ((await limiter.blocked("wrongCode", ip)).blocked) {
+        await padTo(started);
+        return reject(socket, 429, "Too Many Requests");
+      }
+      found = isCompleteRoomCode(code) ? await manager.lookup(code) : ({ kind: "missing" } as const);
+      if (found.kind === "missing") await limiter.consume("wrongCode", ip);
     } catch {
       return reject(socket, 503, "Service Unavailable");
     }
-    if (found.kind === "missing") return reject(socket, 404, "Not Found");
-    if (found.kind === "expired") return reject(socket, 410, "Gone");
+    if (found.kind === "missing") {
+      await padTo(started);
+      return reject(socket, 404, "Not Found");
+    }
+    if (found.kind === "expired") {
+      await padTo(started);
+      return reject(socket, 410, "Gone");
+    }
     const actor = found.actor;
     const participantId = actor.authenticate(tokenFromCookie(req, actor.roomId));
-    if (!participantId) return reject(socket, 401, "Unauthorized");
+    if (!participantId) {
+      await padTo(started);
+      return reject(socket, 401, "Unauthorized");
+    }
 
     const version = Number(url.searchParams.get("v"));
     const lastSeqRaw = url.searchParams.get("lastSeq");
@@ -236,7 +279,7 @@ export function createGateway(config: ServerConfig, manager: RoomManager) {
       ws.on("error", () => undefined);
 
       actor.attach(conn, participantId, lastSeq).catch((err) => {
-        log.warn("ws.attach_failed", { roomId: actor.roomId, message: err instanceof Error ? err.message : "error" });
+        log.warn("ws.attach_failed", { roomId: actor.roomId, message: errText(err) });
       });
     });
   }

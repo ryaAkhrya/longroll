@@ -56,6 +56,8 @@ export const RATE_LIMITS = {
 
 /** 14 §8.2 */
 export const WS_MAX_MESSAGE_BYTES = 64 * 1024;
+/** Pesan editor.* (update Yjs <= 256 KB, base64 ~ 342 KB + envelope). Tipe lain tetap <= 64 KB (14 8.2). */
+export const WS_MAX_EDITOR_MESSAGE_BYTES = 400 * 1024;
 
 /** 07 §8, DEC-071: kursor volatile. */
 export const CURSOR = {

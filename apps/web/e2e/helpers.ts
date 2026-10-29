@@ -38,7 +38,12 @@ export async function passCameraCheck(page: Page, withCamera = true) {
 
 export async function createRoom(page: Page, name: string, withCamera = true): Promise<string> {
   await page.goto("/r/new");
-  await page.getByLabel("Nama panggilan").fill(name);
+  // Teks yang diisi sebelum hidrasi selesai bisa tak tercatat oleh React (value tracker, terlihat di WebKit): kosongkan lalu isi ulang sampai tombol aktif.
+  await expect(async () => {
+    await page.getByLabel("Nama panggilan").fill("");
+    await page.getByLabel("Nama panggilan").fill(name);
+    await expect(page.getByRole("button", { name: "Bikin room" })).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await page.getByRole("button", { name: "Bikin room" }).click();
   await page.waitForURL(/\/r\/[A-HJ-NP-Z2-9]{6}$/);
   await passCameraCheck(page, withCamera);
@@ -48,7 +53,11 @@ export async function createRoom(page: Page, name: string, withCamera = true): P
 export async function joinRoom(page: Page, code: string, name: string, withCamera = true) {
   await page.goto(`/r/${code}`);
   await expect(page.getByText("Room ketemu")).toBeVisible();
-  await page.getByLabel("Nama panggilan").fill(name);
+  await expect(async () => {
+    await page.getByLabel("Nama panggilan").fill("");
+    await page.getByLabel("Nama panggilan").fill(name);
+    await expect(page.getByRole("button", { name: `Gabung ke ${code}` })).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await page.getByRole("button", { name: `Gabung ke ${code}` }).click();
   await passCameraCheck(page, withCamera);
 }

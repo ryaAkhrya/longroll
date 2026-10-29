@@ -99,12 +99,13 @@ export type StudioField =
   | "style.bgColor"
   | "style.gap"
   | "style.cornerRadius"
-  | "style.filterPreset";
+  | "style.filterPreset"
+  | "countdownSec";
 
 /** Struktur dikunci setelah shot pertama (DEC-065). */
 export const STRUCTURE_FIELDS: readonly StudioField[] = ["bindingStrategy", "arrangement", "shotCount", "slotRatio", "output", "slots"];
 
-export type ChangeKind = "frame" | "layout" | "strategy" | "filter" | "style" | "slots" | "revert";
+export type ChangeKind = "frame" | "layout" | "strategy" | "filter" | "style" | "slots" | "timer" | "revert";
 
 export interface StudioChange {
   changeId: string;
@@ -120,7 +121,7 @@ export interface StudioChange {
 /** Nilai sebelum perubahan terakhir (Balikin satu langkah). Disimpan di server, tidak dikirim ke klien. */
 export interface StudioUndo {
   changeId: string;
-  prev: Partial<Pick<StudioState, "layout" | "bindingStrategy" | "frame" | "style">>;
+  prev: Partial<Pick<StudioState, "layout" | "bindingStrategy" | "frame" | "style" | "countdownSec">>;
 }
 
 export interface StudioState {
@@ -159,6 +160,8 @@ export interface StudioPatch {
   output?: OutputSpec;
   slots?: SlotGeometry[];
   style?: Partial<StudioStyle>;
+  /** Timer countdown bersama 3/5/10 detik (DEC-027). */
+  countdownSec?: number;
 }
 
 export type FrameCategory = "KOREAN" | "MINIMAL" | "RETRO" | "SCRAPBOOK" | "PASTEL" | "GRID" | "CUSTOM";

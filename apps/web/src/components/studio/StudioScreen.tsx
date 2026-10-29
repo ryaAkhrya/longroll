@@ -35,6 +35,16 @@ interface StudioScreenProps {
   /** Sheet / elemen mengambang mobile. */
   mobileTools?: ReactNode;
   overlay?: ReactNode;
+  /** P06: shutter nyata (disabled saat countdown / review). Tanpa prop: nonaktif. */
+  shutter?: { disabled: boolean; onPress: () => void; label: string };
+  /** Catatan per kartu peserta (mis. "Nyimpen foto…"). */
+  cardNotes?: Record<string, ReactNode>;
+  /** Kontrol di bar (Bentar/Siap, Tunggu!). */
+  barExtra?: ReactNode;
+  /** Teks kecil di bawah shutter. */
+  caption?: string;
+  /** "Siap x/y" (peserta wajib yang siap). */
+  readyText?: string;
 }
 
 /**
@@ -67,7 +77,7 @@ export function StudioScreen(props: StudioScreenProps) {
               variant="booth"
               onOpenCameraPanel={p.participantId === meId ? onOpenCameraPanel : undefined}
             >
-              {p.ready && p.participantId !== meId && <span className={styles.readyBadge}>✓ Siap</span>}
+              {props.cardNotes?.[p.participantId] ?? (p.ready && p.participantId !== meId && <span className={styles.readyBadge}>✓ Siap</span>)}
             </CameraTile>
           );
         })}
@@ -130,18 +140,26 @@ export function StudioScreen(props: StudioScreenProps) {
             <small>Shot</small>
             <strong className="dc tnum">{props.shotLabel ?? "1/1"}</strong>
           </span>
-          <button type="button" className={styles.shutter} disabled aria-label="Ambil foto — belum tersedia, cekrek hadir di tahap berikutnya" title="Cekrek hadir di tahap berikutnya (P06)">
+          <button
+            type="button"
+            className={styles.shutter}
+            disabled={!props.shutter || props.shutter.disabled}
+            onClick={props.shutter?.onPress}
+            aria-label={props.shutter?.label ?? "Ambil foto"}
+            data-testid="shutter"
+          >
             <Camera size={24} {...iconProps} />
           </button>
           <span className={styles.stat}>
             <small>Siap</small>
-            <strong className="dc tnum">
-              {ready}/{count}
+            <strong className="dc tnum" data-testid="ready-count">
+              {props.readyText ?? `${ready}/${count}`}
             </strong>
           </span>
         </div>
         <div className={styles.barRight}>
-          <p className={styles.caption}>Cekrek hadir di tahap berikutnya</p>
+          {props.barExtra}
+          <p className={styles.caption}>{props.caption ?? "Siapa aja boleh cekrek"}</p>
           {props.dockRight && <span className={styles.dockRight}>{props.dockRight}</span>}
         </div>
       </footer>

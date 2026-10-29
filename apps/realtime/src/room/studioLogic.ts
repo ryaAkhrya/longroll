@@ -13,7 +13,7 @@ import {
 import type { CustomFrameView, FrameContentType, FrameTemplate, ParticipantSlot, SessionView, StudioContext, StudioResult } from "@longroll/shared";
 import { uuidv7 } from "../security";
 import { framePrefix } from "../storage/types";
-import { activeSession } from "./sessionLogic";
+import { activeSession, publicSession } from "./sessionLogic";
 import type { Emit, StudioInit } from "./sessionLogic";
 import { RoomError } from "./types";
 import type { RoomState, ServerFrame } from "./types";
@@ -45,10 +45,7 @@ export const defaultStudioInit: StudioInit = (draft, s) => {
   s.studio = initStudio(s.mode, slots.length ? slots : ["P1"]);
 };
 
-/** SessionView untuk klien: tanpa nilai undo internal. */
-export function publicSession(s: SessionView): SessionView {
-  return { ...structuredClone(s), studio: publicStudio(s.studio) };
-}
+export { publicSession };
 
 function emitStudio(emit: Emit, s: SessionView) {
   emit({ type: "studio.updated", payload: { sessionId: s.sessionId, studio: publicStudio(s.studio)!, change: s.studio?.lastChange ?? null } });
@@ -56,7 +53,7 @@ function emitStudio(emit: Emit, s: SessionView) {
 
 function requireStudio(draft: RoomState, sessionId: unknown): SessionView {
   const s = activeSession(draft);
-  if (!s || s.sessionId !== sessionId || s.state !== "STUDIO" || !s.studio || !s.mode) throw new RoomError("NOT_IN_STUDIO");
+  if (!s || s.sessionId !== sessionId || (s.state !== "STUDIO" && s.state !== "CAPTURING") || !s.studio || !s.mode) throw new RoomError("NOT_IN_STUDIO");
   return s;
 }
 

@@ -1,4 +1,6 @@
 import { LIMITS } from "./config";
+import type { CaptureState } from "./capture";
+import type { PlayerColor } from "./players";
 import type { StudioState } from "./studio/types";
 
 /** 4 mode (08 §2, REQ-VOTE-02). */
@@ -41,7 +43,7 @@ export interface VotingView {
 
 export interface SessionLogEntry {
   atMs: number;
-  type: "CREATED" | "CLOSING" | "TIE" | "RANDOM_PICK" | "LOCKED" | "CLOSED";
+  type: "CREATED" | "CLOSING" | "TIE" | "RANDOM_PICK" | "LOCKED" | "CAPTURING" | "EDITING" | "FINAL" | "REOPENED" | "CLOSED";
   by?: string | null;
   detail?: Record<string, unknown>;
 }
@@ -59,7 +61,45 @@ export interface SessionView<TStudio = StudioState> {
   lockedAtMs: number | null;
   voting: VotingView;
   studio: TStudio | null;
+  /** P06: shot, attempt, keputusan per peserta (null sebelum shot pertama di-arm). */
+  capture: CaptureState | null;
+  /** P08: ada setelah Selesai edit (FINAL) dan tetap ada setelah CLOSED (galeri). */
+  result: SessionResult | null;
   eventLog: SessionLogEntry[];
+}
+
+/**
+ * Hasil sesi (12 2): dibuat/diperbarui saat `session.finalize` (DEC-059). Key storage hanya di server
+ * (`docSnapshotKey`, `previewKey`); klien memperoleh gambar lewat `gallery.get` / `asset.urls` (signed URL).
+ */
+export interface SessionResult {
+  sessionId: string;
+  index: number;
+  mode: Mode;
+  title: string;
+  finalizedAtMs: number;
+  finalizedBy: string;
+  /** Tanggal yang tampil di dekor frame (sama dengan editor: lockedAtMs ?? createdAtMs). */
+  dateMs: number;
+  frameRef: string | null;
+  outputPreset: string;
+  acceptedAttempts: { shotIndex: number; participantId: string; attemptId: string; participantNameAtCapture: string; color: PlayerColor }[];
+  participants: { participantId: string; name: string; color: PlayerColor }[];
+  /** Versi finalisasi (naik tiap Balik edit + Selesai lagi) — membedakan pratinjau lama/baru. */
+  version: number;
+  /** SERVER ONLY. */
+  docSnapshotKey?: string;
+  previewKey?: string | null;
+  /** Pratinjau WebP hasil render klien sudah diunggah & diverifikasi. */
+  previewReady: boolean;
+}
+
+export function publicResult(r: SessionResult | null | undefined): SessionResult | null {
+  if (!r) return null;
+  const { docSnapshotKey, previewKey, ...rest } = r;
+  void docSnapshotKey;
+  void previewKey;
+  return rest;
 }
 
 /** Default PROPOSED terpusat (DEC-023/025/053/081). */

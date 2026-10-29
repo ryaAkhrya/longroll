@@ -1,0 +1,42 @@
+.panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; color: var(--ink); }
+.head { display: flex; align-items: center; gap: 10px; }
+.title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--mute-text); }
+.warn { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn-text, #8a5a00); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.stickers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 56px); gap: 8px; }
+.sticker { width: 56px; height: 56px; padding: 7px; border-radius: 14px; border: 0; background: var(--sunk); cursor: pointer; }
+.sticker:hover { background: var(--lav); }
+.sticker:disabled { opacity: 0.5; cursor: not-allowed; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.dot { width: 30px; height: 30px; border-radius: 50%; border: 0; box-shadow: inset 0 0 0 1px rgba(27, 23, 32, 0.25); cursor: pointer; }
+.dotOn { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--plum); }
+.width { display: grid; place-items: center; width: 56px; height: 40px; border: 0; border-radius: 12px; background: var(--sunk); cursor: pointer; }
+.width span { display: block; background: var(--ink); }
+.widthOn { box-shadow: 0 0 0 2px var(--plum); }
+.filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.filter { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.filterOn { box-shadow: 0 0 0 2px var(--plum); }
+.swatch { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: linear-gradient(135deg, #f2ae8c, #e5ddb8 35%, #7dc49d 70%, #a893e0); }
+.frameList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.frameItem { width: 100%; min-height: 40px; text-align: left; padding: 0 12px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; }
+.frameOn { background: var(--lav); color: var(--plum); }
+.layers, .history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 38dvh; overflow-y: auto; }
+.layer { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px 0 12px; border-radius: 10px; background: var(--sunk); font-size: 13px; cursor: pointer; }
+.layer:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px; }
+.layerOn { background: var(--lav); color: var(--plum); }
+.layerHidden { opacity: 0.55; }
+.layerName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.layerBy { font-size: 11px; color: var(--mute-text); }
+.iconBtn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.histRow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+.histText { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.histTime { font-size: 11px; color: var(--mute-text); white-space: nowrap; }
+.ghost { width: 22px; height: 22px; border-radius: 50%; background: var(--sunk); }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ink2); }
+.textarea { width: 100%; padding: 10px 12px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-size: 15px; color: var(--ink); resize: vertical; }
+.seg { flex: 1; min-height: 34px; border: 0; border-radius: 10px; background: var(--sunk); font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.segOn { background: var(--plum); color: #fff; }
+.font_serif { font-family: var(--font-serif); font-style: italic; }
+.font_display { font-family: var(--font-display); }
