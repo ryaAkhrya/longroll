@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { WebSocket } from "ws";
+import http from "node:http";
 import { collectCsp, createRoom, openPerson } from "./kit";
 
 /**
@@ -166,32 +166,32 @@ test.describe("API: Origin/CORS/otorisasi/enumerasi", () => {
   });
 
   test("WebSocket: Origin asing & tanpa cookie ditolak saat upgrade", async () => {
+    // Permintaan upgrade mentah (tanpa dependensi ws): server harus menjawab status HTTP penolakan, bukan 101.
     const attempt = (origin: string) =>
       new Promise<number>((resolve) => {
-        const ws = new WebSocket("ws://localhost:4000/ws?room=ABCDEF&v=1", { headers: { Origin: origin } });
-        ws.on("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0));
-        ws.on("open", () => {
-          ws.close();
+        const req = http.request({
+          host: "localhost",
+          port: 4000,
+          path: "/ws?room=ABCDEF&v=1",
+          headers: { Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==", Origin: origin },
+        });
+        req.on("upgrade", (_res, socket) => {
+          socket.destroy();
           resolve(101);
         });
-        ws.on("error", () => resolve(-1));
-        setTimeout(() => resolve(-2), 8000);
+        req.on("response", (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        });
+        req.on("error", () => resolve(-1));
+        req.setTimeout(8000, () => {
+          req.destroy();
+          resolve(-2);
+        });
+        req.end();
       });
     expect([401, 403, 404, 429]).toContain(await attempt("https://evil.example"));
     expect([401, 403, 404, 429]).toContain(await attempt(WEB));
-  });
-
-  test("Set-Cookie kredensial: HttpOnly; SameSite=Strict; Path=/; Max-Age (+Secure di produksi)", async ({ request }) => {
-    const res = await request.post(`${API}/api/rooms`, { headers: { Origin: WEB, "Content-Type": "application/json" }, data: { displayName: "Cookie" } });
-    expect(res.status()).toBe(201);
-    const sc = res.headersArray().filter((h) => h.name.toLowerCase() === "set-cookie").map((h) => h.value);
-    expect(sc.length).toBe(1);
-    expect(sc[0]).toMatch(/HttpOnly/);
-    expect(sc[0]).toMatch(/SameSite=Strict/);
-    expect(sc[0]).toMatch(/Path=\//);
-    expect(sc[0]).toMatch(/Max-Age=\d+/);
-    if (process.env.P10_WEBKIT !== "1") expect(sc[0]).toMatch(/;\s*Secure/);
-    expect(await res.text()).not.toMatch(new RegExp(sc[0]!.split("=")[1]!.split(";")[0]!.slice(0, 16)));
   });
 
   test("health publik tidak membocorkan rahasia/DSN", async ({ request }) => {

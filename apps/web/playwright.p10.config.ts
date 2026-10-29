@@ -53,7 +53,7 @@ export default defineConfig({
       cwd: "../..",
       url: "http://localhost:4000/api/health",
       reuseExistingServer: false,
-      stdout: "pipe",
+      stdout: "pipe" as const,
       env: {
         PORT: "4000",
         ALLOWED_ORIGINS: "http://localhost:3000",
