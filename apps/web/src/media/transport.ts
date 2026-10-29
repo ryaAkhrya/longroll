@@ -1,4 +1,7 @@
 import type { RtcSignal, RtcSignalType } from "@longroll/shared";
+import { countCandidate, emptyCounts, turnTransports } from "./diagnose";
+import type { CandType, PeerDiag } from "./diagnose";
+import { rtcDebugEnabled } from "./debugFlag";
 import { encodingFor, nextQuality } from "./quality";
 import type { QualityState } from "./quality";
 
@@ -31,7 +34,9 @@ interface Peer {
   ignoreOffer: boolean;
   transceiver: RTCRtpTransceiver | null;
   stream: MediaStream | null;
-  pendingCandidates: RTCIceCandidateInit[];
+  /** pcId lawan yang meminta offer baru (rtc.restart) saat offer kita masih berjalan. */
+  restartPc: string | null;
+  restartTimer: ReturnType<typeof setTimeout> | null;
   status: PeerStatus;
   relay: boolean;
   createdAt: number;
@@ -39,6 +44,38 @@ interface Peer {
   failures: number;
   disconnectTimer: ReturnType<typeof setTimeout> | null;
   connectTimer: ReturnType<typeof setTimeout> | null;
+  diag: PeerDiagState;
+}
+
+/** Penghitung diagnostik per peer: hanya angka/jenis, tidak pernah SDP, alamat, atau kredensial. */
+interface PeerDiagState {
+  local: ReturnType<typeof emptyCounts>;
+  remote: ReturnType<typeof emptyCounts>;
+  signals: PeerDiag["signals"];
+  iceErrors: PeerDiag["iceErrors"];
+  selected: PeerDiag["selected"];
+  media: PeerDiag["media"];
+  rebuilds: number;
+  events: string[];
+}
+
+const newDiagState = (rebuilds = 0): PeerDiagState => ({
+  local: emptyCounts(),
+  remote: emptyCounts(),
+  signals: { offerOut: 0, offerIn: 0, answerOut: 0, answerIn: 0, iceOut: 0, iceIn: 0, restartOut: 0, restartIn: 0 },
+  iceErrors: [],
+  selected: null,
+  media: null,
+  rebuilds,
+  events: [],
+});
+
+/** STUN publik cadangan bila daftar ICE dari server tak terjangkau (timeout/error): tanpa ini hanya kandidat host dan NAT mana pun gagal. */
+export const FALLBACK_ICE_SERVERS: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302"] }];
+
+export interface IceMeta {
+  source: "server" | "fallback-stun" | "none";
+  fetchMs: number | null;
 }
 
 export interface MeshOptions {
@@ -47,6 +84,8 @@ export interface MeshOptions {
   signal: (type: RtcSignalType, payload: RtcSignal) => void;
   getIceServers: () => Promise<RTCIceServer[]>;
   onChange: () => void;
+  /** Uji TURN: true = hanya kandidat relay (butuh diagnostik aktif). Dibaca tiap membuat PC. */
+  forceRelay?: () => boolean;
   /** Tes: konfigurasi waktu. */
   timings?: Partial<typeof DEFAULT_TIMINGS>;
 }
@@ -59,6 +98,8 @@ const DEFAULT_TIMINGS = {
   /** 09 §5.2: rebuild PC saat `failed` maks. 3×. */
   maxRebuilds: 3,
   statsIntervalMs: 2_000,
+  /** Batas menunggu daftar ICE sebelum jatuh ke STUN cadangan: antrean transport serial, fetch menggantung memblokir SEMUA peer. */
+  iceFetchMs: 6_000,
 };
 
 /** Peserta dengan participantId lebih kecil adalah pihak "impolite" yang membuat offer (09 §5). */
@@ -87,13 +128,34 @@ export class MeshTransport implements MediaTransport {
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   private readonly t: typeof DEFAULT_TIMINGS;
-  /** Jejak debug (dev): jenis event saja, tanpa SDP/kandidat. */
+  /** Jejak debug (dev, atau produksi dengan ?rtcdebug=1): jenis event saja, tanpa SDP/kandidat/alamat. */
   readonly trace: string[] = [];
+  private readonly debug = process.env.NODE_ENV !== "production" || rtcDebugEnabled();
+  /** Sumber & lama pengambilan daftar ICE terakhir (untuk laporan diagnostik). */
+  iceMeta: IceMeta = { source: "none", fetchMs: null };
+  iceSummary = { stun: 0, turn: 0, turnTransports: [] as string[], policy: "all" as "all" | "relay" };
   private log(msg: string) {
-    if (process.env.NODE_ENV === "production") return;
+    if (!this.debug) return;
     this.trace.push(`${Date.now() % 100000} ${msg}`);
     if (this.trace.length > 300) this.trace.shift();
   }
+  /** Catat event per peer (ring 40) dengan waktu relatif sejak PC dibuat. */
+  private note(peer: Peer, msg: string) {
+    if (!this.debug) return;
+    peer.diag.events.push(`+${Date.now() - peer.createdAt}ms ${msg}`);
+    if (peer.diag.events.length > 40) peer.diag.events.shift();
+  }
+
+  /**
+   * Kandidat ICE yang tiba sebelum deskripsi (offer/answer) PC pengirimnya diproses, atau sebelum peer ada: disimpan per `pc`
+   * pengirim dan dimasukkan saat deskripsi dengan `pc` yang sama diterapkan. Sebelumnya kandidat seperti ini dibuang permanen
+   * (pc tak cocok) dan satu sisi gagal tersambung.
+   */
+  private readonly earlyIce = new Map<string, { pc: string; c: RTCIceCandidateInit; at: number }[]>();
+  private static readonly EARLY_ICE_MAX = 64;
+  private static readonly EARLY_ICE_TTL_MS = 30_000;
+  /** Tunggu jawaban atas offer yang sedang berjalan sebelum menuruti `rtc.restart` dengan membangun ulang PC. */
+  private static readonly RESTART_GRACE_MS = 4_000;
 
   /** Semua operasi peer & sinyal diserialkan: urutan offer → ice terjaga walau ada rebuild async. */
   private tail: Promise<unknown> = Promise.resolve();
@@ -190,7 +252,10 @@ export class MeshTransport implements MediaTransport {
   retry(id: string) {
     void this.enqueue(async () => {
       const peer = this.peers.get(id);
-      if (peer) peer.failures = 0;
+      if (peer) {
+        peer.failures = 0;
+        peer.status = "connecting"; // pengguna menekan "Coba lagi": tampilkan upaya baru
+      }
       await this.rebuild(id, true);
     });
   }
@@ -208,15 +273,32 @@ export class MeshTransport implements MediaTransport {
 
     if (type === "rtc.restart") {
       if (!peer) {
-        await this.createPeer(from, "initial");
+        peer = await this.createPeer(from, "initial");
+        if (peer) peer.diag.signals.restartIn++;
         return;
       }
+      peer.diag.signals.restartIn++;
       if (peer.polite) {
         // Peer impolite meminta ulang: cukup tunggu offer barunya.
         return;
       }
       if (peer.remotePcId === payload.pc && (peer.pc.connectionState === "connected" || peer.pc.connectionState === "connecting")) {
         peer.pc.restartIce();
+        return;
+      }
+      if (peer.remotePcId === null && peer.pc.signalingState === "have-local-offer") {
+        // Offer kita masih menuju PC lawan (yang baru saja dibuat dan memang memintanya). Membuangnya sekarang membuat offer
+        // dan kandidat saling silang di jaringan: satu sisi tersambung, sisi lain gagal. Tunggu jawabannya; bila tak datang, bangun ulang.
+        const held = peer;
+        held.restartPc = payload.pc;
+        this.note(held, "restart ditunda: offer masih berjalan");
+        if (held.restartTimer) clearTimeout(held.restartTimer);
+        held.restartTimer = setTimeout(() => {
+          held.restartTimer = null;
+          void this.enqueue(async () => {
+            if (this.peers.get(from) === held && held.remotePcId === null && held.restartPc) await this.rebuild(from, false);
+          });
+        }, MeshTransport.RESTART_GRACE_MS);
         return;
       }
       await this.rebuild(from, false);
@@ -228,36 +310,74 @@ export class MeshTransport implements MediaTransport {
       else if (peer.remotePcId && peer.remotePcId !== payload.pc) peer = await this.rebuild(from, false, true);
       if (!peer) return;
       peer.remotePcId = payload.pc;
+      peer.diag.signals.offerIn++;
+      this.note(peer, "offer diterima");
       await this.onDescription(peer, payload.sdp!);
+      await this.drainEarlyIce(peer, payload.pc);
       return;
     }
 
-    if (!peer) return;
+    if (!peer) {
+      if (type === "rtc.ice" && payload.candidate) this.stashIce(from, payload.pc, payload.candidate);
+      this.log(`${type} sebelum peer ada untuk ${from.slice(0, 4)}: ${type === "rtc.ice" ? "disimpan" : "dibuang"}`);
+      return;
+    }
     if (type === "rtc.answer") {
       if (payload.rpc && payload.rpc !== peer.pcId) return; // jawaban untuk PC lama
+      if (peer.restartPc && peer.restartPc !== payload.pc) {
+        // Jawaban dari PC lawan yang sudah diganti (ia me-restart dengan pc baru): tak berguna, bangun ulang.
+        await this.rebuild(from, false);
+        return;
+      }
+      peer.diag.signals.answerIn++;
+      this.note(peer, "answer diterima");
+      peer.restartPc = null;
+      if (peer.restartTimer) clearTimeout(peer.restartTimer);
+      peer.restartTimer = null;
       peer.remotePcId = payload.pc;
       await this.onDescription(peer, payload.sdp!);
+      await this.drainEarlyIce(peer, payload.pc);
       return;
     }
 
     if (type === "rtc.ice") {
-      if (payload.rpc && payload.rpc !== peer.pcId) return;
-      if (peer.remotePcId && peer.remotePcId !== payload.pc) return;
+      if (payload.rpc && payload.rpc !== peer.pcId) return; // untuk PC kita yang lama
       if (!payload.candidate) return;
-      if (!peer.pc.remoteDescription) {
-        peer.pendingCandidates.push(payload.candidate);
+      peer.diag.signals.iceIn++;
+      countCandidate(peer.diag.remote, payload.candidate.candidate);
+      if (peer.remotePcId === payload.pc && peer.pc.remoteDescription) {
+        try {
+          await peer.pc.addIceCandidate(payload.candidate);
+        } catch {
+          /* kandidat basi/ditolak saat ignoreOffer: abaikan */
+        }
         return;
       }
-      try {
-        await peer.pc.addIceCandidate(payload.candidate);
-      } catch {
-        /* kandidat basi/ditolak saat ignoreOffer: abaikan */
-      }
+      // Deskripsi PC pengirim ini belum diterapkan (atau pc berbeda dari yang sedang dipakai): simpan sampai offer/answer-nya tiba.
+      this.stashIce(from, payload.pc, payload.candidate);
     }
+  }
+
+  private stashIce(from: string, pc: string, c: RTCIceCandidateInit) {
+    const now = Date.now();
+    const list = (this.earlyIce.get(from) ?? []).filter((e) => now - e.at < MeshTransport.EARLY_ICE_TTL_MS);
+    list.push({ pc, c, at: now });
+    while (list.length > MeshTransport.EARLY_ICE_MAX) list.shift();
+    this.earlyIce.set(from, list);
+  }
+
+  private async drainEarlyIce(peer: Peer, pc: string) {
+    const list = this.earlyIce.get(peer.id);
+    if (!list?.length || !peer.pc.remoteDescription) return;
+    const mine = list.filter((e) => e.pc === pc);
+    this.earlyIce.set(peer.id, list.filter((e) => e.pc !== pc));
+    for (const e of mine) await peer.pc.addIceCandidate(e.c).catch(() => undefined);
+    if (mine.length) this.note(peer, `kandidat awal dimasukkan: ${mine.length}`);
   }
 
   close() {
     this.closed = true;
+    this.earlyIce.clear();
     if (this.statsTimer) clearInterval(this.statsTimer);
     for (const id of Array.from(this.peers.keys())) this.closePeer(id);
     this.listeners.clear();
@@ -273,17 +393,84 @@ export class MeshTransport implements MediaTransport {
   private send(peer: Peer, type: RtcSignalType, extra: Partial<RtcSignal>) {
     const payload: RtcSignal = { to: peer.id, pc: peer.pcId, ...extra } as RtcSignal;
     if (peer.remotePcId) payload.rpc = peer.remotePcId;
+    const sg = peer.diag.signals;
+    if (type === "rtc.offer") sg.offerOut++;
+    else if (type === "rtc.answer") sg.answerOut++;
+    else if (type === "rtc.ice") sg.iceOut++;
+    else if (type === "rtc.restart") sg.restartOut++;
     if (type !== "rtc.ice") this.log(`out ${type} to=${peer.id.slice(0, 4)} pc=${peer.pcId.slice(0, 4)} rpc=${payload.rpc?.slice(0, 4)}`);
     this.opts.signal(type, payload);
   }
 
-  private async createPeer(id: string, reason: "initial" | "from-offer" | "rebuild"): Promise<Peer | undefined> {
+  /**
+   * Daftar ICE dengan batas waktu. Gagal/timeout → STUN publik cadangan (bukan daftar kosong): dengan daftar kosong browser
+   * hanya punya kandidat host dan koneksi lintas jaringan mustahil.
+   */
+  private async loadIceServers(): Promise<RTCIceServer[]> {
+    const started = Date.now();
+    try {
+      const servers = await Promise.race([
+        this.opts.getIceServers(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("ice-timeout")), this.t.iceFetchMs)),
+      ]);
+      if (!Array.isArray(servers) || servers.length === 0) throw new Error("ice-empty");
+      this.iceMeta = { source: "server", fetchMs: Date.now() - started };
+      return servers;
+    } catch (err) {
+      this.iceMeta = { source: "fallback-stun", fetchMs: Date.now() - started };
+      this.log(`ice servers gagal (${err instanceof Error ? err.message : "error"}): pakai STUN cadangan`);
+      return FALLBACK_ICE_SERVERS;
+    }
+  }
+
+  /** Snapshot diagnostik per peer (sanitasi: tanpa SDP/alamat/kredensial). */
+  diagnostics(): PeerDiag[] {
+    return Array.from(this.peers.values()).map((p) => {
+      const track = p.stream?.getVideoTracks()[0] ?? null;
+      return {
+        peer: p.id.slice(0, 4),
+        polite: p.polite,
+        ageMs: Date.now() - p.createdAt,
+        signalingState: p.pc.signalingState,
+        iceGatheringState: p.pc.iceGatheringState,
+        iceConnectionState: p.pc.iceConnectionState,
+        connectionState: p.pc.connectionState,
+        uiStatus: p.status,
+        local: { ...p.diag.local },
+        remote: { ...p.diag.remote },
+        signals: { ...p.diag.signals },
+        iceErrors: p.diag.iceErrors.slice(),
+        track: { received: !!track, readyState: track?.readyState ?? null, muted: track ? track.muted : null },
+        selected: p.diag.selected,
+        media: p.diag.media,
+        connectedOnce: p.connectedOnce,
+        rebuilds: p.diag.rebuilds,
+      };
+    });
+  }
+
+  /** Event terakhir per peer (untuk laporan diagnostik). */
+  peerEvents(id: string): string[] {
+    return this.peers.get(id)?.diag.events.slice() ?? [];
+  }
+
+  private async createPeer(id: string, reason: "initial" | "from-offer" | "rebuild", carry?: Peer): Promise<Peer | undefined> {
     if (this.closed) return;
-    const iceServers = await this.opts.getIceServers().catch(() => [] as RTCIceServer[]);
+    const iceServers = await this.loadIceServers();
     if (this.closed) return;
     const existing = this.peers.get(id);
     if (existing && reason !== "rebuild") return existing;
-    const pc = new RTCPeerConnection({ iceServers });
+    // Peer pengganti (rebuild) mewarisi riwayat PC sebelumnya: status "failed" tetap terlihat selama upaya otomatis berlanjut
+    // (tombol "Coba lagi" tersedia, kartu tidak berkedip kembali ke "Menyambungkan…"), dan hitungan kegagalan/rebuild berlanjut.
+    const prev = existing ?? carry;
+    const policy: "all" | "relay" = this.opts.forceRelay?.() ? "relay" : "all";
+    this.iceSummary = {
+      stun: iceServers.filter((s) => [s.urls].flat().some((u) => /^stuns?:/i.test(u))).length,
+      turn: iceServers.filter((s) => [s.urls].flat().some((u) => /^turns?:/i.test(u))).length,
+      turnTransports: turnTransports(iceServers.flatMap((s) => [s.urls].flat())),
+      policy,
+    };
+    const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: policy });
     const peer: Peer = {
       id,
       pc,
@@ -294,14 +481,16 @@ export class MeshTransport implements MediaTransport {
       ignoreOffer: false,
       transceiver: null,
       stream: null,
-      pendingCandidates: [],
-      status: "connecting",
+      restartPc: null,
+      restartTimer: null,
+      status: prev?.status === "failed" ? "failed" : "connecting",
       relay: false,
       createdAt: Date.now(),
       connectedOnce: false,
-      failures: existing?.failures ?? 0,
+      failures: prev?.failures ?? 0,
       disconnectTimer: null,
       connectTimer: null,
+      diag: newDiagState(prev?.diag.rebuilds ?? 0),
     };
     this.peers.set(id, peer);
     this.log(`create ${id.slice(0, 4)} reason=${reason} pc=${peer.pcId.slice(0, 4)} polite=${peer.polite}`);
@@ -320,10 +509,27 @@ export class MeshTransport implements MediaTransport {
     };
     pc.onicecandidate = ({ candidate }) => {
       if (this.peers.get(id) !== peer) return;
+      if (candidate) countCandidate(peer.diag.local, candidate.candidate);
+      else this.note(peer, `gathering selesai: host=${peer.diag.local.host} srflx=${peer.diag.local.srflx} relay=${peer.diag.local.relay}`);
       this.send(peer, "rtc.ice", { candidate: candidate ? (candidate.toJSON() as RtcSignal["candidate"]) : null });
+    };
+    pc.onicegatheringstatechange = () => this.note(peer, `iceGathering=${pc.iceGatheringState}`);
+    pc.onsignalingstatechange = () => this.note(peer, `signaling=${pc.signalingState}`);
+    pc.onicecandidateerror = (ev) => {
+      const e = ev as RTCPeerConnectionIceErrorEvent;
+      // Host server STUN/TURN saja (tanpa query/kredensial); alamat lokal (`address`) sengaja tidak disimpan.
+      let host = "";
+      try {
+        host = new URL(e.url.replace(/^(stuns?|turns?):/i, "https://")).host;
+      } catch {
+        host = "";
+      }
+      if (peer.diag.iceErrors.length < 8) peer.diag.iceErrors.push({ code: e.errorCode, text: String(e.errorText ?? "").slice(0, 80), host });
+      this.note(peer, `icecandidateerror ${e.errorCode} ${host}`);
     };
     pc.ontrack = (ev) => {
       if (this.peers.get(id) !== peer) return;
+      this.note(peer, `track ${ev.track.kind} readyState=${ev.track.readyState} muted=${ev.track.muted}`);
       peer.stream = new MediaStream([ev.track]);
       if (!peer.transceiver) peer.transceiver = ev.transceiver;
       this.emit(id, peer.stream);
@@ -333,6 +539,7 @@ export class MeshTransport implements MediaTransport {
 
     peer.connectTimer = setTimeout(() => {
       if (this.peers.get(id) === peer && peer.status === "connecting") {
+        this.note(peer, `connect timeout ${this.t.connectTimeoutMs}ms`);
         peer.status = "failed";
         rtcMetrics.failedTotal++;
         this.opts.onChange();
@@ -356,8 +563,9 @@ export class MeshTransport implements MediaTransport {
       this.teardown(old);
       this.peers.delete(id);
       if (!manual) old.failures++;
+      old.diag.rebuilds++;
     }
-    return this.createPeer(id, fromOffer ? "from-offer" : "rebuild").then((p) => {
+    return this.createPeer(id, fromOffer ? "from-offer" : "rebuild", old).then((p) => {
       if (p && old) p.failures = manual ? 0 : old.failures;
       return p;
     });
@@ -379,8 +587,6 @@ export class MeshTransport implements MediaTransport {
         await pc.setLocalDescription();
         if (pc.localDescription) this.send(peer, "rtc.answer", { sdp: { type: "answer", sdp: pc.localDescription.sdp } });
       }
-      const pending = peer.pendingCandidates.splice(0);
-      for (const c of pending) await pc.addIceCandidate(c).catch(() => undefined);
     } catch {
       /* deskripsi basi (PC sudah diganti) */
     }
@@ -418,6 +624,7 @@ export class MeshTransport implements MediaTransport {
     if (this.peers.get(peer.id) !== peer) return;
     const pc = peer.pc;
     this.log(`state ${peer.id.slice(0, 4)} pc=${peer.pcId.slice(0, 4)} conn=${pc.connectionState} ice=${pc.iceConnectionState}`);
+    this.note(peer, `conn=${pc.connectionState} ice=${pc.iceConnectionState}`);
     const state = pc.connectionState;
     const ice = pc.iceConnectionState;
     if (state === "connected" || ice === "connected" || ice === "completed") {
@@ -459,11 +666,15 @@ export class MeshTransport implements MediaTransport {
   private teardown(peer: Peer) {
     if (peer.disconnectTimer) clearTimeout(peer.disconnectTimer);
     if (peer.connectTimer) clearTimeout(peer.connectTimer);
+    if (peer.restartTimer) clearTimeout(peer.restartTimer);
     peer.pc.onnegotiationneeded = null;
     peer.pc.onicecandidate = null;
     peer.pc.ontrack = null;
     peer.pc.onconnectionstatechange = null;
     peer.pc.oniceconnectionstatechange = null;
+    peer.pc.onicegatheringstatechange = null;
+    peer.pc.onsignalingstatechange = null;
+    peer.pc.onicecandidateerror = null;
     try {
       peer.pc.close();
     } catch {
@@ -488,6 +699,16 @@ export class MeshTransport implements MediaTransport {
       if (peer.status !== "connected") continue;
       try {
         const report = await peer.pc.getStats();
+        let inBytes = 0;
+        let inFrames = 0;
+        let outBytes = 0;
+        report.forEach((s) => {
+          if (s.type === "inbound-rtp" && s.kind === "video") {
+            inBytes += Number(s.bytesReceived ?? 0);
+            inFrames += Number(s.framesDecoded ?? 0);
+          } else if (s.type === "outbound-rtp" && s.kind === "video") outBytes += Number(s.bytesSent ?? 0);
+        });
+        peer.diag.media = { bytesReceived: inBytes, framesDecoded: inFrames, bytesSent: outBytes };
         let selectedPairId: string | null = null;
         report.forEach((s) => {
           if (s.type === "transport" && s.selectedCandidatePairId) selectedPairId = s.selectedCandidatePairId as string;
@@ -497,7 +718,13 @@ export class MeshTransport implements MediaTransport {
           if (s.type !== "candidate-pair" || !isSelected) return;
           if (typeof s.availableOutgoingBitrate === "number") minBps = Math.min(minBps ?? Infinity, s.availableOutgoingBitrate);
           const local = report.get(s.localCandidateId as string);
+          const remote = report.get(s.remoteCandidateId as string);
           peer.relay = local?.candidateType === "relay";
+          peer.diag.selected = {
+            local: (local?.candidateType as CandType | undefined) ?? "unknown",
+            remote: (remote?.candidateType as CandType | undefined) ?? "unknown",
+            proto: (local?.protocol as string | undefined) ?? null,
+          };
         });
         if (peer.relay) relayPeers++;
       } catch {

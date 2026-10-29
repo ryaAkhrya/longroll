@@ -111,8 +111,13 @@ export function checkProductionConfig(config: ServerConfig): DeployCheck {
   }
 
   if (config.s3 && !/^https:\/\//i.test(config.s3.endpoint)) errors.push("S3_ENDPOINT wajib https:// di produksi.");
-  if (config.ice.turnUrls.length > 0 && !config.ice.turnSharedSecret) errors.push("TURN_URLS diset tanpa TURN_SHARED_SECRET.");
-  if (config.ice.turnUrls.length === 0) warnings.push("TURN_URLS kosong: peserta di balik NAT ketat tidak bisa terhubung (hanya STUN). Lihat infra/turn/README.md.");
+  const ice = config.ice;
+  const staticCred = !!ice.turnUsername && !!ice.turnCredential;
+  if (ice.turnUrls.length > 0 && !ice.turnSharedSecret && !staticCred) errors.push("TURN_URLS diset tanpa kredensial: isi TURN_SHARED_SECRET atau TURN_USERNAME + TURN_CREDENTIAL.");
+  if ((ice.turnUsername || ice.turnCredential) && !staticCred) errors.push("TURN_USERNAME dan TURN_CREDENTIAL harus diisi berpasangan.");
+  if (ice.turnCredentialsUrl && !/^https:\/\//i.test(ice.turnCredentialsUrl)) errors.push("TURN_CREDENTIALS_URL wajib https://.");
+  if (ice.turnUrls.length === 0 && !ice.turnCredentialsUrl) warnings.push("TURN belum dikonfigurasi: peserta di balik NAT ketat/CGNAT/UDP terblokir tidak bisa terhubung (hanya STUN). Lihat infra/turn/README.md.");
+  else if (![...ice.turnUrls].some((u) => /^turns:/i.test(u) || /transport=tcp/i.test(u)) && ice.turnUrls.length > 0 && !ice.turnCredentialsUrl) warnings.push("TURN_URLS tanpa turns:/transport=tcp: jaringan yang memblokir UDP tetap gagal. Tambahkan turns:<host>:443.");
   if (config.trustProxy === 0) warnings.push("TRUST_PROXY=0 di belakang proxy hosting: semua klien akan berbagi satu batas IP. Set jumlah proxy tepercaya (Railway: 1).");
   return { errors, warnings };
 }

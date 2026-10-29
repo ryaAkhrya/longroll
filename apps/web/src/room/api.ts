@@ -24,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+async function call<T>(method: "GET" | "POST", path: string, body?: unknown, timeoutMs?: number): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${REALTIME_URL}${path}`, {
@@ -33,6 +33,7 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
       cache: "no-store",
       headers: body === undefined ? undefined : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     });
   } catch {
     throw new ApiError(0, "NETWORK");
@@ -55,7 +56,7 @@ export const api = {
   session: (code: string) => call<SessionResponse>("POST", `${room(code)}/session`),
   leave: (code: string) => call<{ ok: true }>("POST", `${room(code)}/leave`),
   /** STUN/TURN untuk WebRTC; butuh cookie kredensial room. */
-  iceServers: (code: string) => call<IceServersResponse>("GET", `${room(code)}/turn-credentials`),
+  iceServers: (code: string) => call<IceServersResponse>("GET", `${room(code)}/turn-credentials`, undefined, 5_000),
   /** Frame custom (P05): presign → PUT langsung → complete (validasi server) → signed URL baca. */
   framePrepare: (code: string, body: FramePrepareRequest) => call<FramePrepareResponse>("POST", `${room(code)}/frames`, body),
   frameComplete: (code: string, frameId: string) => call<FrameCompleteResponse>("POST", `${room(code)}/frames/${encodeURIComponent(frameId)}/complete`),

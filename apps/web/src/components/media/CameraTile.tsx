@@ -148,6 +148,7 @@ export function CameraTile({
       style={{ "--ring": `var(--${participant.color.toLowerCase()}-mid)` } as CSSProperties}
       aria-label={`Kamera ${name}${isSelf ? " (kamu)" : ""}, ${statusText}`}
       data-camera={view.kind}
+      data-peer={isSelf ? undefined : participant.participantId.slice(0, 4)}
     >
       {view.kind === "video" && (
         <VideoView stream={view.stream} mirrored={mirrored} presentation={presentation} onPlaying={() => setPlayingFor(view.stream)} />

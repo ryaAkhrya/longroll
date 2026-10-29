@@ -1,0 +1,11 @@
+.root { position: fixed; left: 10px; bottom: calc(10px + var(--safe-bottom)); z-index: 90; font-size: 12px; }
+.fab { height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: #1b1720; color: #fff; font: inherit; font-weight: 700; opacity: 0.85; }
+.panel { width: min(92vw, 460px); max-height: 70dvh; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: #1b1720; color: #fff; box-shadow: var(--sh3); }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 18px; line-height: 1; }
+.verdicts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; line-height: 1.4; }
+.verdicts li { padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); }
+.actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.actions button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: #fff; color: #1b1720; font: inherit; font-weight: 700; }
+.relay { color: rgba(255, 255, 255, 0.85); }
+.pre { margin: 0; overflow: auto; flex: 1; min-height: 80px; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }

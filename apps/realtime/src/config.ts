@@ -40,7 +40,17 @@ export interface ServerConfig {
    * TURN memakai skema REST "use-auth-secret" (coturn & banyak penyedia terkelola):
    * username = `expiry:participantId`, credential = base64(HMAC-SHA1(secret, username)).
    */
-  ice: { stunUrls: string[]; turnUrls: string[]; turnSharedSecret: string | null; turnTtlSeconds: number };
+  ice: {
+    stunUrls: string[];
+    turnUrls: string[];
+    turnSharedSecret: string | null;
+    turnTtlSeconds: number;
+    /** TURN kredensial statis penyedia (alternatif secret bersama). */
+    turnUsername: string | null;
+    turnCredential: string | null;
+    /** Endpoint REST penyedia terkelola yang mengembalikan daftar ICE sementara. Berisi kunci API: JANGAN dicatat. */
+    turnCredentialsUrl: string | null;
+  };
   rateLimitSalt: string;
   /** Jumlah proxy tepercaya di depan service (0 = tidak ada; XFF diabaikan). Hanya entri XFF ke-N dari KANAN yang dipercaya. */
   trustProxy: number;
@@ -142,6 +152,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       turnUrls: list(env.TURN_URLS, ""),
       turnSharedSecret: env.TURN_SHARED_SECRET?.trim() || null,
       turnTtlSeconds: num(env.TURN_TTL_SECONDS, 3600),
+      turnUsername: env.TURN_USERNAME?.trim() || null,
+      turnCredential: env.TURN_CREDENTIAL?.trim() || null,
+      turnCredentialsUrl: env.TURN_CREDENTIALS_URL?.trim() || null,
     },
     // Salt acak per proses bila tidak diset: hash IP berganti saat restart (rotasi alami).
     rateLimitSalt: env.RATE_LIMIT_SALT?.trim() || randomBytes(32).toString("base64url"),

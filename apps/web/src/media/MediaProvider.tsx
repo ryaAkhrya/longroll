@@ -17,6 +17,10 @@ import {
   stopStream,
 } from "./camera";
 import type { Facing } from "./camera";
+import { RtcDiagnosticsPanel } from "@/components/media/RtcDiagnosticsPanel";
+import { rtcDebugEnabled, rtcForceRelay } from "./debugFlag";
+import { browserName, diagnosePeer } from "./diagnose";
+import type { DiagReport } from "./diagnose";
 import { MeshTransport } from "./transport";
 import type { PeerInfo } from "./transport";
 
@@ -48,6 +52,8 @@ export interface MediaApi {
   setPresentation: (cp: CameraPresentation) => void;
   resetPresentation: () => void;
   retryPeer: (participantId: string) => void;
+  /** Laporan diagnostik WebRTC tersanitasi (hanya bermakna bila ?rtcdebug=1 atau dev). */
+  diagReport: () => DiagReport | null;
 }
 
 const noop = () => undefined;
@@ -76,6 +82,7 @@ const NO_MEDIA: MediaApi = {
   setPresentation: noop,
   resetPresentation: noop,
   retryPeer: noop,
+  diagReport: () => null,
 };
 
 const MediaContext = createContext<MediaApi>(NO_MEDIA);
@@ -164,6 +171,7 @@ export function MediaProvider({ client, code, inCheck, children }: { client: Roo
         iceRef.current = { at: Date.now(), ttl: res.ttlSec, servers: res.iceServers };
         return res.iceServers;
       },
+      forceRelay: rtcForceRelay,
       onChange: () => {
         setTick((n) => n + 1);
         const q = t.qualityLevel;
@@ -183,6 +191,7 @@ export function MediaProvider({ client, code, inCheck, children }: { client: Roo
         status: () => Object.fromEntries(t.peerIds().map((id) => [id, t.peerInfo(id)?.status])),
         quality: () => t.qualityLevel,
         trace: () => t.trace.slice(),
+        diagnostics: () => t.diagnostics(),
       };
     }
     return () => {
@@ -393,6 +402,32 @@ export function MediaProvider({ client, code, inCheck, children }: { client: Roo
   // Bersihkan kamera saat keluar room / unmount.
   useEffect(() => () => stopStream(localRef.current.stream), []);
 
+  const debugOn = useMemo(() => rtcDebugEnabled(), []);
+  const socketStatus = state.status;
+  const diagReport = useCallback((): DiagReport | null => {
+    if (!transport) return null;
+    const playing = new Map<string, boolean>();
+    document.querySelectorAll<HTMLElement>("li[data-peer]").forEach((li) => {
+      const v = li.querySelector("video");
+      playing.set(li.dataset.peer ?? "", !!v && v.videoWidth > 0 && !v.paused);
+    });
+    const nav = navigator as Navigator & { connection?: { effectiveType?: string } };
+    const peers = transport.diagnostics().map((d) => {
+      const pl = playing.has(d.peer) ? playing.get(d.peer)! : null;
+      return { ...d, playing: pl, verdict: diagnosePeer(d, { turnConfigured: transport.iceSummary.turn > 0, playing: pl ?? undefined, forceRelay: transport.iceSummary.policy === "relay" }) };
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      app: "longroll-web",
+      browser: browserName(navigator.userAgent),
+      network: { effectiveType: nav.connection?.effectiveType ?? null, online: navigator.onLine },
+      ice: { stun: transport.iceSummary.stun, turn: transport.iceSummary.turn, turnTransports: transport.iceSummary.turnTransports, source: transport.iceMeta.source, policy: transport.iceSummary.policy, fetchMs: transport.iceMeta.fetchMs },
+      socket: socketStatus,
+      peers,
+      events: transport.diagnostics().flatMap((d) => transport.peerEvents(d.peer).map((e) => `${d.peer} ${e}`)).slice(-60),
+    };
+  }, [transport, socketStatus]);
+
   const api_ = useMemo<MediaApi>(
     () => ({
       local,
@@ -406,11 +441,17 @@ export function MediaProvider({ client, code, inCheck, children }: { client: Roo
       setPresentation,
       resetPresentation,
       retryPeer: (id) => transport?.retry(id),
+      diagReport,
     }),
     // `tick` memaksa nilai baru saat status/stream peer berubah (state transport ada di luar React).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [local, transport, enable, disable, skip, switchDevice, flip, setMirrored, setPresentation, resetPresentation, tick],
+    [local, transport, enable, disable, skip, switchDevice, flip, setMirrored, setPresentation, resetPresentation, diagReport, tick],
   );
 
-  return <MediaContext.Provider value={api_}>{children}</MediaContext.Provider>;
+  return (
+    <MediaContext.Provider value={api_}>
+      {children}
+      {debugOn && <RtcDiagnosticsPanel />}
+    </MediaContext.Provider>
+  );
 }

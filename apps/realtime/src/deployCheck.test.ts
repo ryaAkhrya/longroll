@@ -56,9 +56,13 @@ describe("checkProductionConfig (DEC-082, 15 §3)", () => {
   it("S3 wajib https; TURN_URLS tanpa secret ditolak; TURN kosong & TRUST_PROXY=0 hanya peringatan", () => {
     expect(check({ S3_ENDPOINT: "http://s3.example.com" }).errors.join()).toMatch(/S3_ENDPOINT/);
     expect(check({ TURN_SHARED_SECRET: "" }).errors.join()).toMatch(/TURN_SHARED_SECRET/);
+    expect(check({ TURN_SHARED_SECRET: "", TURN_USERNAME: "u", TURN_CREDENTIAL: "c" }).errors).toEqual([]);
+    expect(check({ TURN_USERNAME: "u" }).errors.join()).toMatch(/berpasangan/);
+    expect(check({ TURN_URLS: "", TURN_SHARED_SECRET: "", TURN_CREDENTIALS_URL: "http://x.test/k" }).errors.join()).toMatch(/TURN_CREDENTIALS_URL wajib https/);
+    expect(check({ TURN_URLS: "", TURN_SHARED_SECRET: "", TURN_CREDENTIALS_URL: "https://x.test/k" }).warnings.join()).not.toMatch(/TURN belum/);
     const w = check({ TURN_URLS: "", TURN_SHARED_SECRET: "", TRUST_PROXY: "0" });
     expect(w.errors).toEqual([]);
-    expect(w.warnings.join()).toMatch(/TURN_URLS kosong/);
+    expect(w.warnings.join()).toMatch(/TURN belum dikonfigurasi/);
     expect(w.warnings.join()).toMatch(/TRUST_PROXY=0/);
   });
 

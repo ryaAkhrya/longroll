@@ -1,7 +1,6 @@
-import { createHmac } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { CAPTURE_CONFIG, FRAME_LIMITS, isCompleteRoomCode, LIMITS, normalizeRoomCode } from "@longroll/shared";
-import type { ErrorResponse, IceServersResponse, ParticipantView, PreviewResponse, SessionResponse } from "@longroll/shared";
+import type { ErrorResponse, ParticipantView, PreviewResponse, SessionResponse } from "@longroll/shared";
 import type { ServerConfig } from "../config";
 import type { FrameService } from "../frames/service";
 import { RESULT_PREVIEW_MAX_BYTES } from "../room/results";
@@ -15,6 +14,7 @@ import { RoomError } from "../room/types";
 import { initialOf } from "../room/views";
 import { StoreUnavailableError } from "../store/types";
 import type { RoomStore } from "../store/types";
+import { IceProvider } from "./ice";
 import { RateLimiter } from "./rateLimit";
 import {
   applyCors,
@@ -55,6 +55,7 @@ function isLocal(s: ObjectStorage): s is LocalStorage {
 
 export function createApiHandler({ config, manager, store, storage, frames, limiter: sharedLimiter }: ApiDeps) {
   const limiter = sharedLimiter ?? new RateLimiter(store, config.rateLimitSalt);
+  const ice = new IceProvider(config.ice);
 
   const wsUrlFor = (code: string) => `${config.publicWsUrl}?code=${encodeURIComponent(code)}`;
 
@@ -200,16 +201,7 @@ export function createApiHandler({ config, manager, store, storage, frames, limi
     if (found.kind !== "open") return sendError(res, { error: found.kind === "expired" ? "ROOM_EXPIRED" : "ROOM_NOT_FOUND" });
     const pid = found.actor.authenticate(tokenFromCookie(req, found.actor.roomId));
     if (!pid) return sendError(res, { error: "AUTH_INVALID" });
-    const { stunUrls, turnUrls, turnSharedSecret, turnTtlSeconds } = config.ice;
-    const body: IceServersResponse = { iceServers: [], ttlSec: turnTtlSeconds, turn: false };
-    if (stunUrls.length) body.iceServers.push({ urls: stunUrls });
-    if (turnSharedSecret && turnUrls.length) {
-      const username = `${Math.floor(Date.now() / 1000) + turnTtlSeconds}:${pid}`;
-      const credential = createHmac("sha1", turnSharedSecret).update(username).digest("base64");
-      body.iceServers.push({ urls: turnUrls, username, credential });
-      body.turn = true;
-    }
-    sendJson(res, 200, body);
+    sendJson(res, 200, await ice.build(pid));
   }
 
   /** Pemegang cookie room ini (bukan LEFT). Mengirim error & null bila gagal. */
