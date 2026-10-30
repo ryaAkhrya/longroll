@@ -1,11 +1,11 @@
-.panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; color: var(--ink); }
+.panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; color: var(--ink); }
 .head { display: flex; align-items: center; gap: 10px; }
 .title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
 .note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--mute-text); }
 .warn { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn-text, #8a5a00); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
-.stickers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 56px); gap: 8px; }
+.stickers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, 56px); justify-content: start; gap: 8px; }
 .sticker { width: 56px; height: 56px; padding: 7px; border-radius: 14px; border: 0; background: var(--sunk); cursor: pointer; }
 .sticker:hover { background: var(--lav); }
 .sticker:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -19,8 +19,17 @@
 .filter { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
 .filterOn { box-shadow: 0 0 0 2px var(--plum); }
 .swatch { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: linear-gradient(135deg, #f2ae8c, #e5ddb8 35%, #7dc49d 70%, #a893e0); }
+/* Sheet mobile: preset jadi satu baris yang bisa digeser supaya slider langsung terlihat tanpa menggulir. */
+@media (max-width: 767px), (orientation: landscape) and (max-height: 500px) {
+  .filters { display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; margin: 0 -2px; padding: 2px; }
+  .filters::-webkit-scrollbar { display: none; }
+  .filter { flex: none; width: 76px; scroll-snap-align: start; padding: 6px; gap: 4px; }
+  .swatch { aspect-ratio: 3 / 2; }
+}
 .frameList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.frameItem { width: 100%; min-height: 40px; text-align: left; padding: 0 12px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; }
+.frameItem { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; text-align: left; padding: 0 12px; border-radius: 12px; border: 0; background: var(--sunk); font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; }
+.frameName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frameSwatch { flex: none; width: 22px; height: 30px; border-radius: 4px; }
 .frameOn { background: var(--lav); color: var(--plum); }
 .layers, .history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 38dvh; overflow-y: auto; }
 .layer { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px 0 12px; border-radius: 10px; background: var(--sunk); font-size: 13px; cursor: pointer; }
@@ -40,3 +49,9 @@
 .segOn { background: var(--plum); color: #fff; }
 .font_serif { font-family: var(--font-serif); font-style: italic; }
 .font_display { font-family: var(--font-display); }
+.tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--sunk); }
+.tab { position: relative; flex: 1; min-height: 34px; padding: 0 6px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink2); cursor: pointer; }
+.tabOn { background: var(--surface); color: var(--ink); box-shadow: var(--sh1); }
+.tabDot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--plum); }
+.adjList { display: flex; flex-direction: column; gap: 10px; min-height: 96px; }
+@media (pointer: coarse) { .tab { min-height: 44px; } }

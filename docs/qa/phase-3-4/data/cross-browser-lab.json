@@ -1,0 +1,396 @@
+{
+  "result": {
+    "chromium": {
+      "ctxFilterProp": true,
+      "ctxFilterWorks": true,
+      "cases": {
+        "netral": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177.46,
+            176.64
+          ],
+          "chroma": [
+            58.85,
+            58.65
+          ]
+        },
+        "exposure": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            206.74,
+            205.92
+          ],
+          "chroma": [
+            49.28,
+            49.08
+          ]
+        },
+        "monoPreset": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            182.5,
+            181.68
+          ],
+          "chroma": [
+            1.9,
+            1.7
+          ]
+        },
+        "hangatPlusAdjust": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            185.72,
+            184.9
+          ],
+          "chroma": [
+            35.52,
+            35.32
+          ]
+        },
+        "grain": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177.32,
+            176.5
+          ],
+          "chroma": [
+            58.75,
+            58.56
+          ]
+        },
+        "collage": {
+          "figures": 3,
+          "ready": 3,
+          "errs": [],
+          "luma": [
+            181.83,
+            184.27,
+            193.71
+          ],
+          "chroma": [
+            61.14,
+            58.78,
+            50.93
+          ]
+        }
+      }
+    },
+    "firefox": {
+      "ctxFilterProp": true,
+      "ctxFilterWorks": true,
+      "cases": {
+        "netral": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177.47,
+            176.64
+          ],
+          "chroma": [
+            58.72,
+            58.53
+          ]
+        },
+        "exposure": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            206.79,
+            205.96
+          ],
+          "chroma": [
+            49.32,
+            49.12
+          ]
+        },
+        "monoPreset": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            183.2,
+            182.37
+          ],
+          "chroma": [
+            1.91,
+            1.7
+          ]
+        },
+        "hangatPlusAdjust": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            185.82,
+            185
+          ],
+          "chroma": [
+            35.72,
+            35.52
+          ]
+        },
+        "grain": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177,
+            176.17
+          ],
+          "chroma": [
+            58.64,
+            58.44
+          ]
+        },
+        "collage": {
+          "figures": 3,
+          "ready": 3,
+          "errs": [],
+          "luma": [
+            181.77,
+            184.58,
+            193.66
+          ],
+          "chroma": [
+            61.16,
+            58.51,
+            50.88
+          ]
+        }
+      }
+    },
+    "webkit": {
+      "ctxFilterProp": false,
+      "ctxFilterWorks": false,
+      "cases": {
+        "netral": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177.49,
+            176.67
+          ],
+          "chroma": [
+            58.71,
+            58.51
+          ]
+        },
+        "exposure": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            206.81,
+            205.99
+          ],
+          "chroma": [
+            49.19,
+            48.99
+          ]
+        },
+        "monoPreset": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            183.29,
+            182.46
+          ],
+          "chroma": [
+            1.9,
+            1.7
+          ]
+        },
+        "hangatPlusAdjust": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            186.07,
+            185.25
+          ],
+          "chroma": [
+            35.51,
+            35.31
+          ]
+        },
+        "grain": {
+          "figures": 2,
+          "ready": 2,
+          "errs": [],
+          "luma": [
+            177.36,
+            176.53
+          ],
+          "chroma": [
+            58.63,
+            58.43
+          ]
+        },
+        "collage": {
+          "figures": 3,
+          "ready": 3,
+          "errs": [],
+          "luma": [
+            181.85,
+            184.68,
+            193.68
+          ],
+          "chroma": [
+            61.07,
+            58.42,
+            50.88
+          ]
+        }
+      }
+    }
+  },
+  "summary": {
+    "netral": {
+      "chromium": {
+        "ready": "2/2",
+        "meanLuma": 177.05,
+        "meanChroma": 58.75,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "2/2",
+        "meanLuma": 177.06,
+        "meanChroma": 58.63,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.01
+      },
+      "webkit": {
+        "ready": "2/2",
+        "meanLuma": 177.08,
+        "meanChroma": 58.61,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.03
+      }
+    },
+    "exposure": {
+      "chromium": {
+        "ready": "2/2",
+        "meanLuma": 206.33,
+        "meanChroma": 49.18,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "2/2",
+        "meanLuma": 206.38,
+        "meanChroma": 49.22,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.05
+      },
+      "webkit": {
+        "ready": "2/2",
+        "meanLuma": 206.4,
+        "meanChroma": 49.09,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.07
+      }
+    },
+    "monoPreset": {
+      "chromium": {
+        "ready": "2/2",
+        "meanLuma": 182.09,
+        "meanChroma": 1.8,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "2/2",
+        "meanLuma": 182.78,
+        "meanChroma": 1.8,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.7
+      },
+      "webkit": {
+        "ready": "2/2",
+        "meanLuma": 182.88,
+        "meanChroma": 1.8,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.79
+      }
+    },
+    "hangatPlusAdjust": {
+      "chromium": {
+        "ready": "2/2",
+        "meanLuma": 185.31,
+        "meanChroma": 35.42,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "2/2",
+        "meanLuma": 185.41,
+        "meanChroma": 35.62,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.1
+      },
+      "webkit": {
+        "ready": "2/2",
+        "meanLuma": 185.66,
+        "meanChroma": 35.41,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.35
+      }
+    },
+    "grain": {
+      "chromium": {
+        "ready": "2/2",
+        "meanLuma": 176.91,
+        "meanChroma": 58.66,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "2/2",
+        "meanLuma": 176.58,
+        "meanChroma": 58.54,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.33
+      },
+      "webkit": {
+        "ready": "2/2",
+        "meanLuma": 176.94,
+        "meanChroma": 58.53,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.04
+      }
+    },
+    "collage": {
+      "chromium": {
+        "ready": "3/3",
+        "meanLuma": 186.6,
+        "meanChroma": 56.95,
+        "errs": 0
+      },
+      "firefox": {
+        "ready": "3/3",
+        "meanLuma": 186.67,
+        "meanChroma": 56.85,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.31
+      },
+      "webkit": {
+        "ready": "3/3",
+        "meanLuma": 186.74,
+        "meanChroma": 56.79,
+        "errs": 0,
+        "maxLumaDiffVsChromium": 0.41
+      }
+    }
+  }
+}

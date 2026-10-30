@@ -1,5 +1,6 @@
 import type { Ctx2D, DrawResources, Fill, ImageLike } from "@longroll/shared";
 import { patternImage } from "@/components/studio/canvas/assets";
+import { adjustedPhoto, supportsCtxFilter } from "./adjustImage";
 
 /**
  * Sumber daya gambar untuk `drawDocument`/`drawElementBody` (paket shared). Dipakai bersama oleh kanvas editor
@@ -29,6 +30,9 @@ export function asCtx(ctx: CanvasRenderingContext2D): Ctx2D {
 
 export function makeResources(opts: { photo: (attemptId: string) => ImageLike | null; overlay: ImageLike | null; scale: number }): DrawResources {
   return {
+    pixelScale: opts.scale,
+    adjusted: adjustedPhoto,
+    pixelFilters: !supportsCtxFilter(),
     photo: opts.photo,
     overlay: opts.overlay,
     path: path2d,

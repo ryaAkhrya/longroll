@@ -1,0 +1,23 @@
+{
+  "label": "after-local",
+  "base": "http://localhost:3000",
+  "landing": {
+    "raw": 661913,
+    "gz": 205120,
+    "n": 9
+  },
+  "lobbyExtra": {
+    "raw": 592201,
+    "gz": 185894,
+    "n": 7
+  },
+  "editorExtra": {
+    "raw": 46217,
+    "gz": 15240,
+    "n": 1
+  },
+  "total": {
+    "raw": 1300331,
+    "gz": 406254
+  }
+}

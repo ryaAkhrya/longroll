@@ -1,6 +1,7 @@
-import { CAPTURE_CONFIG, captureCrop } from "@longroll/shared";
+import { CAPTURE_CONFIG, applyCssFilter, captureCrop } from "@longroll/shared";
 import type { CameraPresentation } from "@longroll/shared";
 import { presentationFilter } from "@/media/presentation";
+import { supportsCtxFilter } from "@/render/adjustImage";
 
 export interface PhotoBlob {
   blob: Blob;
@@ -71,12 +72,21 @@ export function drawFrame(video: HTMLVideoElement, cp: CameraPresentation, mirro
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas 2d tidak tersedia");
   const filter = presentationFilter(cp);
-  if (filter !== "none") ctx.filter = filter;
+  // Safari/WebKit mengabaikan `ctx.filter`: terapkan filter yang SAMA (string CSS yang dipakai pratinjau <video>) lewat fallback piksel
+  // bersama agar foto yang diambil sama dengan yang terlihat di pratinjau.
+  const native = filter !== "none" && supportsCtxFilter();
+  if (native) ctx.filter = filter;
   if (crop.flip) {
     ctx.translate(crop.outW, 0);
     ctx.scale(-1, 1);
   }
   ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.outW, crop.outH);
+  if (filter !== "none" && !native) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    applyCssFilter(img.data, filter);
+    ctx.putImageData(img, 0, 0);
+  }
   return canvas;
 }
 

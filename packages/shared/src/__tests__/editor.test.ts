@@ -501,3 +501,62 @@ describe("doodle: encode/decode & RDP", () => {
     expect(decodePoints("abc")).toBeNull();
   });
 });
+
+describe("TC-EDIT-020b: penggabungan riwayat & balikin tidak merusak kunci (akar flake fuzz)", () => {
+  const photoOf = (d: Y.Doc, id?: string) => listElements(d).find((e) => (id ? e.id === id : e.type === "photo"))!;
+
+  it("transform + ubah urutan layer dalam jendela gabung lalu dibalikin: z kembali ke nilai awal, bukan null, dan dokumen tetap valid", () => {
+    const seed = seeded("PHOTO_STRIP");
+    const clock = { t: 1000 };
+    const c = ctxOf("pa", "pa", clock);
+    const photo = photoOf(seed.doc);
+    const z0 = photo.z;
+    commitTransform(seed.doc, c, photo.id, { x: 50, y: 60, scaleX: 1, scaleY: 1, rotation: 5 });
+    clock.t += 300; // di dalam jendela gabung 2 detik → satu entri
+    setZ(seed.doc, c, photo.id, "front");
+    const merged = readHistory(seed.doc).filter((h) => h.elementId === photo.id);
+    expect(merged).toHaveLength(1);
+    expect(Object.keys(merged[0]!.before!)).toEqual(expect.arrayContaining(Object.keys(merged[0]!.after!)));
+    clock.t += 5000;
+    expect(revertEntry(seed.doc, ctxOf("pb", "pb", clock), merged[0]!.id).ok).toBe(true);
+    expect(photoOf(seed.doc, photo.id).z).toBe(z0);
+    expect(validateDoc(seed.doc, accepted(seed.accepted))).toBeNull();
+  });
+
+  it("entri lama tanpa nilai-sebelum untuk sebuah kunci: kunci itu dilewati (tidak ditimpa null)", () => {
+    const seed = seeded("PHOTO_STRIP");
+    const clock = { t: 1000 };
+    const c = ctxOf("pa", "pa", clock);
+    const photo = photoOf(seed.doc);
+    setZ(seed.doc, c, photo.id, "front");
+    const z1 = photoOf(seed.doc, photo.id).z;
+    const [entry] = readHistory(seed.doc).filter((h) => h.elementId === photo.id);
+    // Simulasikan data lama hasil bug penggabungan: after punya x & z, before hanya x.
+    const legacy = { ...entry!, before: { x: Number(photo.x) }, after: { x: Number(photo.x), z: z1 } };
+    const arr = seed.doc.getArray<unknown>("history");
+    seed.doc.transact(() => {
+      arr.delete(arr.length - 1, 1);
+      arr.push([legacy]);
+    });
+    const rr = revertEntry(seed.doc, ctxOf("pb", "pb", clock), legacy.id);
+    expect(rr).toEqual({ ok: true });
+    expect(photoOf(seed.doc, photo.id).z).toBe(z1);
+    expect(validateDoc(seed.doc, accepted(seed.accepted))).toBeNull();
+  });
+
+  it("urutan elemen deterministik walau ada z non-string (data rusak): sama di dua replika dengan urutan sisip berbeda", () => {
+    const mk = (order: string[]) => {
+      const d = createEditorDoc();
+      d.transact(() => {
+        for (const id of order) {
+          const m = new Y.Map<unknown>();
+          m.set("type", "sticker");
+          m.set("z", id === "bad" ? null : id === "p" ? "a1" : "a0");
+          elementsMap(d).set(id, m);
+        }
+      });
+      return listElements(d).map((e) => e.id);
+    };
+    expect(mk(["a", "bad", "p", "b"])).toEqual(mk(["b", "p", "bad", "a"]));
+  });
+});

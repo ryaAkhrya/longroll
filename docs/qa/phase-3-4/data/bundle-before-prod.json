@@ -1,0 +1,23 @@
+{
+  "label": "before-prod",
+  "base": "https://www.ldroll.web.id",
+  "landing": {
+    "raw": 637333,
+    "gz": 196643,
+    "n": 9
+  },
+  "lobbyExtra": {
+    "raw": 592277,
+    "gz": 185761,
+    "n": 6
+  },
+  "editorExtra": {
+    "raw": 42869,
+    "gz": 14468,
+    "n": 2
+  },
+  "total": {
+    "raw": 1272479,
+    "gz": 396872
+  }
+}

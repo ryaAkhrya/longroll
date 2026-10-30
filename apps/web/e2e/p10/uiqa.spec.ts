@@ -22,6 +22,7 @@ const VIEWPORTS: { name: string; w: number; h: number; touch: boolean }[] = [
   { name: "m412x922", w: 412, h: 922, touch: true },
   { name: "m430x932", w: 430, h: 932, touch: true },
   { name: "m667x375-landscape", w: 667, h: 375, touch: true },
+  { name: "m844x390-landscape", w: 844, h: 390, touch: true },
   { name: "t768x1024", w: 768, h: 1024, touch: true },
   { name: "t820x1180", w: 820, h: 1180, touch: true },
   { name: "t1024x768", w: 1024, h: 768, touch: true },
@@ -66,10 +67,19 @@ async function inspect(page: Page, scope: string | null): Promise<Finding[]> {
       return !t || el.contains(t) || t.contains(el);
     };
     const rootEl: Element = scopeSel ? (document.querySelector(scopeSel) ?? document.body) : document.body;
-    const items = Array.from(rootEl.querySelectorAll("button, a[href], input, select, textarea, [role=button], [role=radio], [role=tab]")).filter((e) => visible(e) && !decorative(e));
+    // Dialog modal terbuka (sheet + scrim): kontrol di belakangnya tidak interaktif, jadi bukan tumpang tindih yang dilihat pengguna.
+    const modal = Array.from(document.querySelectorAll("[role=dialog]")).find(visible);
+    const items = Array.from(rootEl.querySelectorAll("button, a[href], input, select, textarea, [role=button], [role=radio], [role=tab]")).filter((e) => visible(e) && !decorative(e) && (!modal || modal.contains(e)));
+    const inHScroller = (el: Element) => {
+      for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        if (/(auto|scroll)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 1) return true;
+      }
+      return false;
+    };
     for (const el of items) {
       const r = el.getBoundingClientRect();
-      if (r.right > vw + 1 || r.left < -1) out.push({ kind: "outside-x", detail: `${name(el)} [${Math.round(r.left)}..${Math.round(r.right)}] vw=${vw}` });
+      if ((r.right > vw + 1 || r.left < -1) && !inHScroller(el)) out.push({ kind: "outside-x", detail: `${name(el)} [${Math.round(r.left)}..${Math.round(r.right)}] vw=${vw}` });
     }
     const hit = (a: DOMRect, b: DOMRect, minV = 2) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > minV;
     // Header sticky sengaja menutupi konten yang digulir di bawahnya; itu bukan tabrakan kontrol.
@@ -92,7 +102,7 @@ async function inspect(page: Page, scope: string | null): Promise<Finding[]> {
     }
     // Teks bertabrakan (hanya elemen dengan teks langsung) di dalam scope bar/header.
     const texts = Array.from(rootEl.querySelectorAll("*")).filter(
-      (el) => visible(el) && !decorative(el) && Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? "").trim().length > 0),
+      (el) => visible(el) && !decorative(el) && (!modal || modal.contains(el)) && Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? "").trim().length > 0),
     );
     for (let i = 0; i < texts.length; i++) {
       for (let j = i + 1; j < texts.length; j++) {
@@ -119,7 +129,7 @@ async function inspect(page: Page, scope: string | null): Promise<Finding[]> {
 }
 
 /** Alur penuh sampai editor dan hasil (viewport kunci saja; ±90 dtk per viewport). Aktif dengan P10_UIQA_DEEP=1. */
-const DEEP = ["m320x568", "m390x844", "t820x1180", "d1366x768"];
+const DEEP = ["m320x568", "m390x844", "m844x390-landscape", "t820x1180", "d1366x768"];
 test.describe("UI QA alur penuh", () => {
   test.skip(process.env.P10_UIQA !== "1" || process.env.P10_UIQA_DEEP !== "1", "set P10_UIQA=1 P10_UIQA_DEEP=1");
   for (const vp of VIEWPORTS.filter((v) => DEEP.includes(v.name))) {
@@ -158,11 +168,14 @@ test.describe("UI QA alur penuh", () => {
         }
         await expect(A.page.getByTestId("editor")).toBeVisible({ timeout: 60_000 });
         await shot(A.page, "11-editor");
-        const stiker = A.page.getByRole("button", { name: /^Stiker/ });
-        if (await stiker.isVisible().catch(() => false)) {
-          await stiker.click();
-          await shot(A.page, "12-editor-stiker");
-        }
+        await editorTool(A.page, "Atur");
+        await expect(A.page.getByRole("tab", { name: "Dasar" })).toBeVisible();
+        await shot(A.page, "12a-editor-atur");
+        await editorTool(A.page, "Frame");
+        await expect(A.page.getByRole("group", { name: "Kategori frame" })).toBeVisible();
+        await shot(A.page, "12b-editor-frame");
+        await editorTool(A.page, "Stiker");
+        await shot(A.page, "12-editor-stiker");
         await A.page.getByRole("button", { name: /^Selesai( edit)?$/ }).first().click();
         await expect(A.page.getByRole("dialog", { name: /Selesai buat semua/ })).toBeVisible();
         await shot(A.page, "13-editor-confirm");
@@ -179,6 +192,27 @@ test.describe("UI QA alur penuh", () => {
     });
   }
 });
+
+/** Buka alat studio (Frame/Layout/…): rail di desktop, sheet "Alat" di mobile. */
+async function studioTool(page: Page, label: string) {
+  const sheet = page.getByRole("dialog", { name: /Alat|Frame|Layout|Filter|Kameraku/ });
+  if (await page.getByRole("button", { name: "Alat", exact: true }).isVisible().catch(() => false)) {
+    if (!(await sheet.isVisible().catch(() => false))) await page.getByRole("button", { name: "Alat", exact: true }).click();
+    const back = page.getByRole("button", { name: "Semua alat" });
+    if (await back.isVisible().catch(() => false)) await back.click();
+    await page.getByRole("button", { name: new RegExp(`^${label}`) }).filter({ visible: true }).first().click();
+    return;
+  }
+  await page.getByRole("button", { name: label, exact: true }).filter({ visible: true }).first().click();
+}
+/** Buka alat editor: navigation (desktop) atau toolbar (mobile). */
+async function editorTool(page: Page, label: string) {
+  // Mobile: sheet panel yang terbuka menutupi dock; tutup dulu seperti yang dilakukan pengguna.
+  const sheet = page.getByRole("dialog").getByRole("button", { name: "Tutup" });
+  if (await sheet.isVisible().catch(() => false)) await sheet.click();
+  const bar = page.getByRole("navigation", { name: "Alat editor" }).or(page.getByRole("toolbar", { name: "Alat editor" }));
+  await bar.getByRole("button", { name: new RegExp(`^${label}`) }).filter({ visible: true }).first().click();
+}
 
 test.describe("UI QA responsif", () => {
   test.skip(process.env.P10_UIQA !== "1", "set P10_UIQA=1");
@@ -224,6 +258,16 @@ test.describe("UI QA responsif", () => {
         await expect(A.page.getByRole("region", { name: "Studio sesi 1" })).toBeVisible({ timeout: 20_000 });
         await shot(A.page, "07-studio");
 
+        // Panel studio Frame & Layout (galeri kategori, susunan baru).
+        await studioTool(A.page, "Frame");
+        await expect(A.page.getByRole("group", { name: "Kategori frame" })).toBeVisible();
+        await shot(A.page, "07b-studio-frame");
+        await studioTool(A.page, "Layout");
+        await expect(A.page.getByRole("radiogroup", { name: "Susunan" })).toBeVisible();
+        await shot(A.page, "07c-studio-layout");
+        const closeSheet = A.page.getByRole("dialog").getByRole("button", { name: "Tutup" });
+        if (await closeSheet.isVisible().catch(() => false)) await closeSheet.click();
+        else await studioTool(A.page, "Layout");
         // Mobile: buka sheet alat.
         const tools = A.page.getByRole("button", { name: "Alat", exact: true });
         if (await tools.isVisible().catch(() => false)) {

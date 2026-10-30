@@ -12,6 +12,8 @@ interface SliderProps {
   max: number;
   step?: number;
   onChange: (value: number) => void;
+  /** Dipanggil SEKALI saat interaksi selesai (lepas jari/mouse, tombol panah dilepas, blur). Untuk menyimpan nilai akhir setelah pratinjau langsung. */
+  onCommit?: (value: number) => void;
   /** Format nilai di kanan (tabular). */
   format?: (value: number) => string;
   disabled?: boolean;
@@ -19,9 +21,14 @@ interface SliderProps {
 }
 
 /** Slider: track 4 px, isi plum, thumb 20 px; label kiri, nilai kanan (05 §7). Native range = aksesibel. */
-export function Slider({ label, value, min, max, step = 0.01, onChange, format, disabled, className }: SliderProps) {
+export function Slider({ label, value, min, max, step = 0.01, onChange, onCommit, format, disabled, className }: SliderProps) {
   const id = useId();
   const pct = ((value - min) / (max - min)) * 100;
+  // Rentang yang melewati 0 (mis. -100..100): isian dimulai dari titik nol, bukan dari ujung kiri.
+  const zero = min < 0 && max > 0 ? ((0 - min) / (max - min)) * 100 : 0;
+  const lo = Math.min(zero, pct);
+  const hi = Math.max(zero, pct);
+  const commit = (el: HTMLInputElement) => onCommit?.(Number(el.value));
   return (
     <div className={cx(styles.field, className)}>
       <div className={styles.head}>
@@ -42,8 +49,11 @@ export function Slider({ label, value, min, max, step = 0.01, onChange, format, 
         disabled={disabled}
         aria-valuetext={format ? format(value) : undefined}
         className={styles.range}
-        style={{ "--pct": `${pct}%` } as CSSProperties}
+        style={{ "--pct": `${pct}%`, "--lo": `${lo}%`, "--hi": `${hi}%` } as CSSProperties}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={(e) => commit(e.currentTarget)}
+        onKeyUp={(e) => /^(Arrow|Page|Home|End)/.test(e.key) && commit(e.currentTarget)}
+        onBlur={(e) => commit(e.currentTarget)}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import type { Ctx2D, DocumentModel, ExportFormat, ExportSize, ImageLike } from "
 /** WebP hanya untuk pratinjau hasil (≤1600 px, tanpa tile). */
 export type RenderFormat = ExportFormat | "webp";
 import { asCtx, makeResources } from "@/render/resources";
+import { clearAdjustCache } from "@/render/adjustImage";
 import { encodePngStream } from "./pngStream";
 
 /**
@@ -183,5 +184,6 @@ export async function renderExport(req: ExportRequest): Promise<ExportResult> {
     return { blob, mime: "image/png", tiled: true };
   } finally {
     for (const b of bitmaps.values()) b.close?.();
+    clearAdjustCache();
   }
 }

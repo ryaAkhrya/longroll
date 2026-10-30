@@ -16,12 +16,14 @@ import {
   readMeta,
   revertEntry,
   setFrame,
+  setGlobalAdjust,
   setGlobalFilter,
+  setPhotoAdjust,
   setZ,
   simplifyRdp,
   updateElement,
 } from "@longroll/shared";
-import type { EditorMeta, ElementView, FilterPresetId, FrameRef, HistoryEntry, ParticipantView, SessionView, StudioState, TextFontStyle } from "@longroll/shared";
+import type { Adjust, EditorMeta, ElementView, FilterPresetId, FrameRef, HistoryEntry, ParticipantView, SessionView, StudioState, TextFontStyle } from "@longroll/shared";
 import { parseLayoutJson } from "@/render/model";
 import { useToast } from "@/components/ui/Toast";
 import type { PeerView } from "@/components/editor/EditorCanvas";
@@ -56,6 +58,8 @@ export interface EditorController {
   z: (id: string, mode: "front" | "back" | "up" | "down") => void;
   setFrame: (ref: FrameRef | null, name: string) => void;
   setGlobalFilter: (f: FilterPresetId | null) => void;
+  setGlobalAdjust: (a: Adjust | null) => void;
+  setPhotoAdjust: (id: string, a: Adjust | null) => void;
   revert: (entryId: string, force?: boolean) => ReturnType<typeof revertEntry>;
   nameOf: (pid: string) => string;
 }
@@ -159,6 +163,8 @@ export function useEditor(client: RoomClient, participants: ParticipantView[], s
     z: (id, mode) => void guard(() => setZ(es.doc, ctx, id, mode)),
     setFrame: (ref, name) => void guard(() => setFrame(es.doc, ctx, ref, name)),
     setGlobalFilter: (f) => void guard(() => setGlobalFilter(es.doc, ctx, f)),
+    setGlobalAdjust: (a) => void guard(() => setGlobalAdjust(es.doc, ctx, a)),
+    setPhotoAdjust: (id, a) => void guard(() => setPhotoAdjust(es.doc, ctx, id, a)),
     revert: (entryId, force) => revertEntry(es.doc, ctx, entryId, force),
     nameOf,
   };

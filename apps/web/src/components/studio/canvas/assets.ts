@@ -13,11 +13,44 @@ import { api } from "@/room/api";
 const patternCache = new Map<string, HTMLCanvasElement>();
 
 export function patternImage(fill: Fill, scale: number): HTMLCanvasElement | null {
-  if (fill.kind !== "dots" && fill.kind !== "paper") return null;
+  if (fill.kind === "solid" || fill.kind === "linear") return null;
   const key = `${JSON.stringify(fill)}@${scale.toFixed(3)}`;
   const hit = patternCache.get(key);
   if (hit) return hit;
   const c = document.createElement("canvas");
+  if (fill.kind === "stripes" || fill.kind === "grid" || fill.kind === "checker") {
+    const tile = fill.kind === "checker" ? fill.size * 2 : Math.max(4, Math.round(fill.spacing));
+    c.width = tile;
+    c.height = tile;
+    const g = c.getContext("2d")!;
+    if (fill.kind === "stripes") {
+      g.strokeStyle = fill.stripe;
+      g.lineWidth = fill.width;
+      // Tiga garis diagonal agar ulangan ubin tanpa sambungan (garis utama + dua sudut).
+      for (let k = -1; k <= 1; k++) {
+        g.beginPath();
+        g.moveTo(k * tile, tile);
+        g.lineTo(k * tile + tile, 0);
+        g.stroke();
+      }
+    } else if (fill.kind === "grid") {
+      g.strokeStyle = fill.line;
+      g.globalAlpha = 0.55;
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(0.5, 0);
+      g.lineTo(0.5, tile);
+      g.moveTo(0, 0.5);
+      g.lineTo(tile, 0.5);
+      g.stroke();
+    } else {
+      g.fillStyle = fill.alt;
+      g.fillRect(0, 0, fill.size, fill.size);
+      g.fillRect(fill.size, fill.size, fill.size, fill.size);
+    }
+    patternCache.set(key, c);
+    return c;
+  }
   const size = Math.max(4, Math.round(fill.spacing * (fill.kind === "paper" ? 4 : 1)));
   c.width = size;
   c.height = size;

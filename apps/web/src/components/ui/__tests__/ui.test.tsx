@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -107,5 +107,48 @@ describe("Toast", () => {
     expect(region).toHaveAttribute("aria-live", "polite");
     await userEvent.click(screen.getByRole("button", { name: "Tampilkan" }));
     expect(region).toHaveTextContent("Link room tersalin");
+  });
+
+  function Two() {
+    const toast = useToast();
+    return (
+      <>
+        <button onClick={() => toast.show({ message: "Beta masuk room" })}>Pasif</button>
+        <button onClick={() => toast.show({ message: "Suaramu gak kekirim", tone: "warn" })}>Peringatan</button>
+        <button onClick={() => toast.show({ message: "Dihapus", action: { label: "Balikin", onAction: () => undefined } })}>Aksi</button>
+      </>
+    );
+  }
+
+  it("notifikasi pasif hilang saat pengguna menggulir; peringatan dan yang punya aksi tetap tampil", async () => {
+    render(
+      <ToastProvider>
+        <Two />
+      </ToastProvider>,
+    );
+    const region = screen.getByRole("region", { name: "Notifikasi" });
+    await userEvent.click(screen.getByRole("button", { name: "Peringatan" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aksi" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pasif" }));
+    expect(region).toHaveTextContent("Beta masuk room");
+    act(() => {
+      window.dispatchEvent(new Event("wheel"));
+    });
+    expect(region).not.toHaveTextContent("Beta masuk room");
+    expect(region).toHaveTextContent("Suaramu gak kekirim");
+    expect(region).toHaveTextContent("Dihapus");
+  });
+
+  it("scroll programatik (reset ke atas saat layar berganti) tidak menutup notifikasi", async () => {
+    render(
+      <ToastProvider>
+        <Two />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Pasif" }));
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(screen.getByRole("region", { name: "Notifikasi" })).toHaveTextContent("Beta masuk room");
   });
 });

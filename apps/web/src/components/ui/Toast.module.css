@@ -10,6 +10,8 @@
 @media (min-width: 1024px) {
   .region { top: auto; bottom: 24px; }
 }
+.lane { height: var(--toast-lane, 0px); transition: height var(--motion-base); }
+@media (min-width: 1024px) { .lane { display: none; } }
 .toast {
   pointer-events: auto;
   display: flex; align-items: center; gap: 10px;

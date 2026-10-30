@@ -1,10 +1,10 @@
 "use client";
 
-import { Brush, ChevronDown, ChevronUp, Frame, Layers, Minus, Plus, Redo2, Smile, Sparkles, Type, Undo2, WifiOff } from "lucide-react";
+import { Brush, ChevronDown, ChevronUp, Frame, Layers, Minus, Plus, Redo2, Smile, SlidersHorizontal, Type, Undo2, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { BUILTIN_FRAMES } from "@longroll/shared";
-import type { FrameRef, HistoryEntry, RoomView, SessionView } from "@longroll/shared";
+import type { Adjust, FrameRef, HistoryEntry, RoomView, SessionView } from "@longroll/shared";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Banner } from "@/components/ui/Banner";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -19,7 +19,7 @@ import type { RoomClient } from "@/room/client";
 import { useMediaQuery, useNow } from "@/room/hooks";
 import { EditorCanvas } from "./EditorCanvas";
 import type { Tool } from "./EditorCanvas";
-import { DoodlePanel, FilterPanel, FramePanel, HistoryPanel, LayerPanel, PropsPanel, StickerPanel, TextPanel } from "./EditorPanels";
+import { AdjustPanel, DoodlePanel, FramePanel, HistoryPanel, LayerPanel, PropsPanel, StickerPanel, TextPanel } from "./EditorPanels";
 import styles from "./EditorScreen.module.css";
 
 type ToolId = "sticker" | "text" | "doodle" | "filter" | "frame" | "layer";
@@ -27,7 +27,7 @@ const TOOLS: { id: ToolId; label: string; icon: ReactNode }[] = [
   { id: "sticker", label: "Stiker", icon: <Smile size={19} {...iconProps} /> },
   { id: "text", label: "Teks", icon: <Type size={19} {...iconProps} /> },
   { id: "doodle", label: "Coret", icon: <Brush size={19} {...iconProps} /> },
-  { id: "filter", label: "Filter", icon: <Sparkles size={19} {...iconProps} /> },
+  { id: "filter", label: "Atur", icon: <SlidersHorizontal size={19} {...iconProps} /> },
   { id: "frame", label: "Frame", icon: <Frame size={19} {...iconProps} /> },
   { id: "layer", label: "Layer", icon: <Layers size={19} {...iconProps} /> },
 ];
@@ -56,6 +56,7 @@ export function EditorScreen({ client, room, session, meId }: Props) {
   const ed = useEditor(client, room.participants, session, meId);
   const now = useNow(5_000, true);
   const [tool, setTool] = useState<ToolId>("sticker");
+  const [adjustDraft, setAdjustDraft] = useState<{ target: string; adjust: Adjust | null } | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(true);
   const [selection, setSelection] = useState<string[]>([]);
@@ -72,15 +73,15 @@ export function EditorScreen({ client, room, session, meId }: Props) {
   // Seleksi yang elemennya sudah dihapus (oleh siapa pun) otomatis hilang.
   const liveSelection = useMemo(() => selection.filter((id) => ed.elements.some((e) => e.id === id)), [selection, ed.elements]);
 
+  const frameRef: FrameRef | null = useMemo(() => parseFrame(ed.meta?.frame ?? null), [ed.meta?.frame]);
   const custom = room.customFrames;
   const frameChoices = useMemo(
     () => [
-      ...BUILTIN_FRAMES.map((t) => ({ id: t.id, name: t.name, ref: { frameId: t.id, source: "BUILTIN" as const, adapt: t.adapt === "PATTERN" ? ("CONTAIN" as const) : t.adapt, overlayOpacity: 1 } satisfies FrameRef })),
-      ...custom.map((f) => ({ id: f.frameId, name: f.template.name, ref: { frameId: f.frameId, source: "CUSTOM" as const, adapt: f.template.adapt, overlayOpacity: 1 } satisfies FrameRef })),
+      ...BUILTIN_FRAMES.filter((t) => !session.mode || t.modes.includes(session.mode) || t.id === frameRef?.frameId).map((t) => ({ id: t.id, name: t.name, category: t.category, palette: t.palette, ref: { frameId: t.id, source: "BUILTIN" as const, adapt: t.adapt === "PATTERN" ? ("CONTAIN" as const) : t.adapt, overlayOpacity: 1 } satisfies FrameRef })),
+      ...custom.map((f) => ({ id: f.frameId, name: f.template.name, category: f.template.category, palette: f.template.palette, ref: { frameId: f.frameId, source: "CUSTOM" as const, adapt: f.template.adapt, overlayOpacity: 1 } satisfies FrameRef })),
     ],
-    [custom],
+    [custom, session.mode, frameRef?.frameId],
   );
-  const frameRef: FrameRef | null = useMemo(() => parseFrame(ed.meta?.frame ?? null), [ed.meta?.frame]);
   const template = frameRef ? (frameLookupFrom(custom)(frameRef.frameId, frameRef.source) ?? null) : null;
   const names = useMemo(() => {
     const slots = ed.layoutJson?.studio.participantSlots ?? [];
@@ -133,7 +134,7 @@ export function EditorScreen({ client, room, session, meId }: Props) {
       case "doodle":
         return <DoodlePanel color={doodle.color} width={doodle.width} onColor={(color) => setDoodle((d) => ({ ...d, color }))} onWidth={(width) => setDoodle((d) => ({ ...d, width }))} />;
       case "filter":
-        return <FilterPanel ed={ed} selected={sel} />;
+        return <AdjustPanel ed={ed} selected={sel} onDraft={setAdjustDraft} />;
       case "frame":
         return <FramePanel ed={ed} frames={frameChoices} current={frameRef?.frameId ?? null} />;
       case "layer":
@@ -190,6 +191,7 @@ export function EditorScreen({ client, room, session, meId }: Props) {
       }}
       onLocalAwareness={ed.es.setAwareness.bind(ed.es)}
       onZoom={setZoom}
+      adjustDraft={adjustDraft}
     />
   );
 

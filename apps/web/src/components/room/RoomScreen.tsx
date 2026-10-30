@@ -10,7 +10,7 @@ import { RoomHeader } from "@/components/layout/RoomHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useToast } from "@/components/ui/Toast";
+import { ToastLane, useToast } from "@/components/ui/Toast";
 import { CameraCheck } from "@/components/media/CameraCheck";
 import { CameraPanelDialog } from "@/components/media/CameraPanelDialog";
 import { MediaProvider } from "@/media/MediaProvider";
@@ -171,6 +171,11 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
                 ? "editing"
                 : "studio";
 
+  // Layar baru selalu dibuka dari atas: posisi gulir lobby tidak boleh terbawa ke vote/studio (konten ke-gulir di bawah header).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view, showGallery]);
+
   const startVote = async () => {
     const ack = await client.sendIntent("session.create", {});
     if (ack.ok) setShowGallery(false);
@@ -256,24 +261,30 @@ export function RoomScreen({ code, session, onExpired, onUnauthorized, onLeft }:
         ) : view === "final" ? (
           <ResultScreen client={client} room={room} session={live!} meId={state.me!} onGallery={() => setShowGallery(true)} onNewSession={() => void startVote()} />
         ) : view === "lobby" ? (
-          <LobbyLayout
-            room={room}
-            meId={state.me}
-            inviteUrl={inviteUrl}
-            clockOffsetMs={state.clockOffsetMs}
-            onOpenCameraPanel={() => setCameraPanel(true)}
-            onStartVote={() => void startVote()}
-            gridOverlay={devCursors("lobby")}
-          />
+          <>
+            <ToastLane />
+            <LobbyLayout
+              room={room}
+              meId={state.me}
+              inviteUrl={inviteUrl}
+              clockOffsetMs={state.clockOffsetMs}
+              onOpenCameraPanel={() => setCameraPanel(true)}
+              onStartVote={() => void startVote()}
+              gridOverlay={devCursors("lobby")}
+            />
+          </>
         ) : view === "voting" ? (
-          <VotingScreen
-            client={client}
-            session={live!}
-            participants={room.participants}
-            meId={state.me}
-            clockOffsetMs={state.clockOffsetMs}
-            overlay={devCursors("vote")}
-          />
+          <>
+            <ToastLane />
+            <VotingScreen
+              client={client}
+              session={live!}
+              participants={room.participants}
+              meId={state.me}
+              clockOffsetMs={state.clockOffsetMs}
+              overlay={devCursors("vote")}
+            />
+          </>
         ) : view === "result" ? (
           <VoteResult
             session={live!}

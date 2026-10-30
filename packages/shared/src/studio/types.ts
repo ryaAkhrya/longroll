@@ -8,7 +8,8 @@ export const PARTICIPANT_SLOTS: readonly ParticipantSlot[] = ["P1", "P2", "P3", 
 export type BindingStrategy = "PER_SHOT_GROUP" | "PER_PARTICIPANT_SHOT" | "FREEFORM";
 export const BINDING_STRATEGIES: readonly BindingStrategy[] = ["PER_SHOT_GROUP", "PER_PARTICIPANT_SHOT", "FREEFORM"];
 
-export type GroupArrangement = "ROW" | "COLUMN" | "GRID" | "BLEND";
+/** HERO = peserta pertama besar di kiri, yang lain ditumpuk di kanan (komposisi editorial). */
+export type GroupArrangement = "ROW" | "COLUMN" | "GRID" | "BLEND" | "HERO";
 
 export type SlotBinding =
   | { kind: "CELL"; shotIndex: number; participantSlot: ParticipantSlot }
@@ -31,8 +32,23 @@ export interface LayoutSlot {
 }
 
 /** Susunan (SCR-11). CUSTOM = slot diedit manual / diambil dari lubang frame. */
-export type Arrangement = "STRIP_VERTICAL" | "STRIP_HORIZONTAL" | "GRID" | "MOSAIC" | "WIDE" | "SCATTER" | "CUSTOM";
-export const ARRANGEMENTS: readonly Arrangement[] = ["STRIP_VERTICAL", "STRIP_HORIZONTAL", "GRID", "MOSAIC", "WIDE", "SCATTER", "CUSTOM"];
+export type Arrangement =
+  | "STRIP_VERTICAL"
+  | "STRIP_HORIZONTAL"
+  /** Strip vertikal zig-zag: tiap foto bergeser kiri/kanan berselang-seling dan sedikit miring. */
+  | "STRIP_ZIGZAG"
+  | "GRID"
+  | "MOSAIC"
+  /** Komposisi majalah: satu foto utama besar + foto pendukung berbeda ukuran. */
+  | "MAGAZINE"
+  | "WIDE"
+  /** Bidang lebar dengan satu peserta menonjol (hero) dan yang lain di sisi. */
+  | "FEATURE"
+  | "SCATTER"
+  /** Kolase asimetris tertata: dua kolom dengan tinggi foto berbeda-beda, tanpa tumpang tindih. */
+  | "MASONRY"
+  | "CUSTOM";
+export const ARRANGEMENTS: readonly Arrangement[] = ["STRIP_VERTICAL", "STRIP_HORIZONTAL", "STRIP_ZIGZAG", "GRID", "MOSAIC", "MAGAZINE", "WIDE", "FEATURE", "SCATTER", "MASONRY", "CUSTOM"];
 
 export type SlotRatio = "1:1" | "4:3" | "3:4" | "16:9" | "9:16";
 export const SLOT_RATIOS: readonly SlotRatio[] = ["1:1", "4:3", "3:4", "16:9", "9:16"];
@@ -164,13 +180,19 @@ export interface StudioPatch {
   countdownSec?: number;
 }
 
-export type FrameCategory = "KOREAN" | "MINIMAL" | "RETRO" | "SCRAPBOOK" | "PASTEL" | "GRID" | "CUSTOM";
+export type FrameCategory = "KOREAN" | "MINIMAL" | "MONO" | "RETRO" | "POLAROID" | "SCRAPBOOK" | "EDITORIAL" | "PASTEL" | "COUPLE" | "FRIENDS" | "SEASON" | "GRID" | "CUSTOM";
 
 export type Fill =
   | { kind: "solid"; color: string }
   | { kind: "linear"; from: string; to: string; angle: number }
   | { kind: "dots"; bg: string; bgTo?: string; dot: string; spacing: number; radius: number }
-  | { kind: "paper"; bg: string; fleck: string; spacing: number };
+  | { kind: "paper"; bg: string; fleck: string; spacing: number }
+  /** Garis diagonal berselang-seling (bg = warna dasar). */
+  | { kind: "stripes"; bg: string; stripe: string; spacing: number; width: number }
+  /** Kertas milimeter/grid tipis. */
+  | { kind: "grid"; bg: string; line: string; spacing: number }
+  /** Papan catur dua warna (bg = warna pertama). */
+  | { kind: "checker"; bg: string; alt: string; size: number };
 
 export type DecorSpec =
   | { type: "date"; format: "YYYY.MM.DD"; anchor: "bottom-right" | "bottom-left" | "bottom-center"; color: string; font: "mono" | "serif" | "display"; size: number }
@@ -179,7 +201,17 @@ export type DecorSpec =
   | { type: "names"; anchor: "bottom-left" | "bottom-center"; color: string; size: number }
   | { type: "sprockets"; color: string }
   | { type: "frameNumbers"; color: string }
-  | { type: "tape"; color: string };
+  | { type: "tape"; color: string }
+  /** Garis tepi di dalam kanvas (`inset` & `width` = fraksi sisi pendek). `double` = dua garis. */
+  | { type: "border"; color: string; inset?: number; width?: number; double?: boolean }
+  /** Bentuk kecil berulang di area tepi (tidak pernah menimpa foto): atas, kiri-kanan, atau sudut. */
+  | { type: "shapes"; shape: ShapeId; color: string; edge: "top" | "sides" | "corners"; count: number; size: number; opacity?: number }
+  /** Sudut foto (seperti sudut album) di tiap slot. */
+  | { type: "corners"; color: string; size?: number }
+  /** Pita teks tipis di bawah (mis. "REC ●"): teks di kiri-atas area footer. */
+  | { type: "label"; text: string; anchor: "top-left" | "top-right"; color: string; font: "mono" | "display" | "serif"; size: number };
+
+export type ShapeId = "star" | "heart" | "sparkle" | "dot" | "plus";
 
 export interface SlotStyle {
   stroke?: string;
@@ -191,6 +223,11 @@ export interface SlotStyle {
   shadow?: boolean;
   /** Radius minimum slot (base px pada lebar 600). */
   radius?: number;
+  /** Polaroid: tebal bingkai bawah / sisi (fraksi tinggi / lebar slot). Default 0.16 / 0.05. */
+  polaroidBottom?: number;
+  polaroidSide?: number;
+  /** Warna bingkai polaroid (default putih). */
+  polaroidColor?: string;
 }
 
 export type AssetRef = { kind: "custom"; frameId: string; width: number; height: number };

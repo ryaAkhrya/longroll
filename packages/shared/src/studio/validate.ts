@@ -55,7 +55,7 @@ export function validateLayout(layout: LayoutSpec, strategy: BindingStrategy, pa
     } else if (b.kind === "SHOT_GROUP") {
       if (strategy !== "PER_SHOT_GROUP") return { reason: "BINDING", detail: "group-in-cell-strategy" };
       if (!Number.isInteger(b.shotIndex) || b.shotIndex < 0 || b.shotIndex >= shotCount) return { reason: "BINDING", detail: "shot-index" };
-      if (!["ROW", "COLUMN", "GRID", "BLEND"].includes(b.arrangement)) return { reason: "BINDING", detail: "arrangement" };
+      if (!["ROW", "COLUMN", "GRID", "BLEND", "HERO"].includes(b.arrangement)) return { reason: "BINDING", detail: "arrangement" };
       const key = `${b.shotIndex}`;
       if (covered.has(key)) return { reason: "BINDING", detail: "duplicate-shot" };
       covered.add(key);

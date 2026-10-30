@@ -79,6 +79,12 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export function groupTiles(w: number, h: number, arrangement: GroupArrangement, n: number): HoleRect[] {
   if (n <= 1) return [{ x: 0, y: 0, w, h }];
   if (arrangement === "COLUMN") return Array.from({ length: n }, (_, i) => ({ x: 0, y: (h / n) * i, w, h: h / n }));
+  if (arrangement === "HERO") {
+    // Peserta pertama menonjol di kiri (56–60% lebar), yang lain ditumpuk rata di kanan.
+    const hw = w * (n === 2 ? 0.6 : 0.56);
+    const rest = n - 1;
+    return [{ x: 0, y: 0, w: hw, h }, ...Array.from({ length: rest }, (_, i) => ({ x: hw, y: (h / rest) * i, w: w - hw, h: h / rest }))];
+  }
   if (arrangement === "GRID") {
     const cols = Math.ceil(Math.sqrt(n));
     const rows = Math.ceil(n / cols);
@@ -95,7 +101,8 @@ export function groupTiles(w: number, h: number, arrangement: GroupArrangement, 
 
 function groupArrangementFor(arr: Arrangement): GroupArrangement {
   if (arr === "WIDE") return "BLEND";
-  if (arr === "GRID" || arr === "MOSAIC") return "GRID";
+  if (arr === "FEATURE") return "HERO";
+  if (arr === "GRID" || arr === "MOSAIC" || arr === "MAGAZINE" || arr === "MASONRY") return "GRID";
   if (arr === "STRIP_HORIZONTAL") return "ROW";
   return "ROW";
 }
@@ -129,14 +136,30 @@ function nearSquare(u: number): { rows: number; cols: number } {
   return { rows: Math.ceil(u / cols), cols };
 }
 
+/** Majalah: 3 kolom; foto utama 2×2 + pendukung (1 tinggi / 2 bertumpuk di kanan, sisanya baris bawah). */
+function magazineShape(u: number): { rows: number; cols: number } {
+  if (u <= 1) return { rows: 1, cols: 1 };
+  return { rows: 2 + Math.ceil(Math.max(0, u - 3) / 3), cols: 3 };
+}
+
 function gridShape(input: PlanInput, u: number): { rows: number; cols: number } {
   const S = input.shotCount;
   const n = input.participantSlots.length;
   const perGroup = input.strategy === "PER_SHOT_GROUP";
   switch (input.arrangement) {
     case "STRIP_VERTICAL":
+    case "STRIP_ZIGZAG":
     case "WIDE":
       return perGroup ? { rows: S, cols: 1 } : { rows: S, cols: n };
+    case "FEATURE":
+      // Satu komposisi hero per shot; tanpa grup (per orang) → susunan majalah.
+      return perGroup ? { rows: S, cols: 1 } : magazineShape(u);
+    case "MAGAZINE":
+      return magazineShape(u);
+    case "MASONRY": {
+      const mc = masonryCols(u);
+      return { rows: Math.max(1, Math.ceil(u / mc)), cols: mc };
+    }
     case "STRIP_HORIZONTAL":
       return perGroup ? { rows: 1, cols: S } : { rows: n, cols: S };
     case "GRID":
@@ -229,7 +252,7 @@ export function checkSafeguards(input: PlanInput): SafeguardViolation | null {
 /** Ukuran kanvas & kotak isi. */
 function canvasFor(input: PlanInput, rows: number, cols: number, r: number, gap: number) {
   const arr = input.arrangement;
-  const vertical = arr === "STRIP_VERTICAL";
+  const vertical = arr === "STRIP_VERTICAL" || arr === "STRIP_ZIGZAG";
   const horizontal = arr === "STRIP_HORIZONTAL";
   const mosaic = arr === "MOSAIC";
   // Baris "efektif" mosaik: slot besar = 2 baris kecil.
@@ -243,7 +266,7 @@ function canvasFor(input: PlanInput, rows: number, cols: number, r: number, gap:
       const uw = uh * r;
       return { W: Math.round(2 * pad + cols * uw + (cols - 1) * gap), H, pad, footer, uw, uh };
     }
-    const W = vertical ? (cols <= 2 ? 600 : 1200) : arr === "WIDE" ? 1800 : 1600;
+    const W = vertical ? (cols <= 2 ? 600 : 1200) : arr === "WIDE" || (arr === "FEATURE" && input.strategy === "PER_SHOT_GROUP") ? 1800 : 1600;
     const pad = Math.round(W * 0.06);
     const footer = Math.round(W * (vertical ? 0.12 : 0.07));
     const uw = (W - 2 * pad - (cols - 1) * gap) / cols;
@@ -266,6 +289,24 @@ function canvasFor(input: PlanInput, rows: number, cols: number, r: number, gap:
   return { W, H, pad, footer, uw, uh: uw / r };
 }
 
+const MASONRY_FACTORS = [1.22, 0.86, 1, 1.3, 0.9, 1.12, 0.95, 1.2];
+
+/** Kolase tertata: 2 kolom untuk ≤ 6 foto, 3 kolom di atasnya (supaya tinggi kanvas tetap wajar). */
+export const masonryCols = (count: number) => (count <= 6 ? 2 : 3);
+
+/** Kolase tertata: dua kolom, tiap foto ditaruh di kolom yang lebih pendek; tinggi bervariasi deterministik; tanpa tumpang tindih. */
+export function masonryLayout(count: number, uw: number, uh: number, gap: number): { items: { col: number; y: number; h: number }[]; blockH: number } {
+  const colY: number[] = Array.from({ length: masonryCols(count) }, () => 0);
+  const items: { col: number; y: number; h: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const col = colY.indexOf(Math.min(...colY));
+    const h = uh * MASONRY_FACTORS[i % MASONRY_FACTORS.length]!;
+    items.push({ col, y: colY[col]!, h });
+    colY[col]! += h + gap;
+  }
+  return { items, blockH: Math.max(...colY) - gap };
+}
+
 export function generatePlan(input: PlanInput): PlanResult {
   const violation = checkSafeguards(input);
   if (violation) return { ok: false, violation };
@@ -275,8 +316,22 @@ export function generatePlan(input: PlanInput): PlanResult {
   const r = ratioValue(input.slotRatio);
   const gap = Math.max(0, Math.min(STUDIO_LIMITS.MAX_GAP_PX, input.gap));
   const c = canvasFor(input, rows, cols, r, gap);
+  let masonry: ReturnType<typeof masonryLayout> | null = null;
+  if (input.arrangement === "MASONRY") {
+    masonry = masonryLayout(u, c.uw, c.uh, gap);
+    if (input.output.preset === "AUTO") {
+      c.H = Math.round(2 * c.pad + c.footer + masonry.blockH);
+    } else {
+      // Ukuran tetap: perkecil seragam sampai muat (tinggi ∝ lebar sel; selisih celah dikoreksi iteratif).
+      for (let k = 0; k < 4 && masonry.blockH > c.H - 2 * c.pad - c.footer; k++) {
+        c.uw *= (c.H - 2 * c.pad - c.footer) / masonry.blockH;
+        c.uh = c.uw / r;
+        masonry = masonryLayout(u, c.uw, c.uh, gap);
+      }
+    }
+  }
   const blockW = cols * c.uw + (cols - 1) * gap;
-  const blockH = rows * c.uh + (rows - 1) * gap;
+  const blockH = masonry ? masonry.blockH : rows * c.uh + (rows - 1) * gap;
   const ox = (c.W - blockW) / 2;
   const contentH = c.H - 2 * c.pad - c.footer;
   const oy = c.pad + Math.max(0, (contentH - blockH) / 2);
@@ -300,7 +355,42 @@ export function generatePlan(input: PlanInput): PlanResult {
   list.forEach((unit, i) => {
     let x: number, y: number, w: number, h: number;
     let rotation = 0;
-    if (input.arrangement === "MOSAIC" && u > 1) {
+    const magazine = (input.arrangement === "MAGAZINE" || (input.arrangement === "FEATURE" && input.strategy !== "PER_SHOT_GROUP")) && u > 1;
+    if (masonry) {
+      const m = masonry.items[i]!;
+      x = ox + m.col * (c.uw + gap);
+      y = oy + m.y;
+      w = c.uw;
+      h = m.h;
+      rotation = (((i * 37) % 5) - 2) * 0.7;
+    } else if (magazine) {
+      const step = c.uw + gap;
+      const full = 3 * c.uw + 2 * gap;
+      if (i === 0) {
+        x = ox;
+        y = oy;
+        w = 2 * c.uw + gap;
+        h = 2 * c.uh + gap;
+      } else if (u === 2) {
+        x = ox + 2 * step;
+        y = oy;
+        w = c.uw;
+        h = 2 * c.uh + gap;
+      } else if (i <= 2) {
+        x = ox + 2 * step;
+        y = oy + (i - 1) * (c.uh + gap);
+        w = c.uw;
+        h = c.uh;
+      } else {
+        const k = i - 3;
+        const row = Math.floor(k / 3);
+        const inRow = Math.min(3, u - 3 - row * 3);
+        w = (full - (inRow - 1) * gap) / inRow;
+        h = c.uh;
+        x = ox + (k % 3) * (w + gap);
+        y = oy + (2 + row) * (c.uh + gap);
+      }
+    } else if (input.arrangement === "MOSAIC" && u > 1) {
       if (i === 0) {
         x = ox;
         y = oy;
@@ -319,6 +409,17 @@ export function generatePlan(input: PlanInput): PlanResult {
       y = oy + p.row * (c.uh + gap);
       w = c.uw;
       h = c.uh;
+      if (input.arrangement === "STRIP_ZIGZAG") {
+        // Berselang-seling kiri/kanan + miring tipis; ukuran 90% supaya geser tidak keluar dari kolom.
+        const odd = p.row % 2 === 1;
+        const nw = w * 0.9;
+        const nh = h * 0.95;
+        x += (w - nw) / 2 + (odd ? 1 : -1) * w * 0.045;
+        y += (h - nh) / 2;
+        w = nw;
+        h = nh;
+        rotation = odd ? 1.2 : -1.2;
+      }
       if (input.arrangement === "SCATTER") {
         // Kolase: 82% sel, geser & miring deterministik (bukan acak) supaya semua klien identik.
         const jx = (((i * 53) % 11) - 5) / 100;

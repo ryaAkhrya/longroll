@@ -2,8 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
-import { Group, Layer, Line, Rect, Shape, Stage, Text, Transformer } from "react-konva";
-import { FONT_STACK, PLACEHOLDER_TINT, STUDIO_LIMITS, acceptedForCell, buildScene, formatDate } from "@longroll/shared";
+import { Group, Layer, Line, Path, Rect, Shape, Stage, Text, Transformer } from "react-konva";
+import { FONT_STACK, PLACEHOLDER_TINT, SHAPE_PATHS, STUDIO_LIMITS, acceptedForCell, buildScene, formatDate } from "@longroll/shared";
 import { AttemptImage } from "@/capture/AttemptImage";
 import type { CaptureState, FrameTemplate, ParticipantView, Scene, SceneDecor, SceneSlot, SlotGeometry, StudioState } from "@longroll/shared";
 import { VideoView } from "@/components/media/VideoView";
@@ -234,6 +234,10 @@ function roundRect(ctx: Konva.Context, w: number, h: number, r: number) {
 }
 
 export function Decor({ d }: { d: SceneDecor }) {
+  if (d.kind === "shape") {
+    const k = d.size / 100;
+    return <Path data={SHAPE_PATHS[d.shape]} x={d.x} y={d.y} offsetX={50} offsetY={50} scaleX={k} scaleY={k} rotation={d.rotation} fill={d.color} opacity={d.opacity} listening={false} />;
+  }
   if (d.kind === "rect") return <Rect x={d.x + d.w / 2} y={d.y + d.h / 2} offsetX={d.w / 2} offsetY={d.h / 2} width={d.w} height={d.h} fill={d.fill} cornerRadius={d.radius} rotation={d.rotation} opacity={d.opacity} />;
   if (d.kind === "mark") {
     const s = d.size / 4;

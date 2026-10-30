@@ -1,0 +1,14 @@
+{
+  "note": "Hasil perf.spec.ts (P10_PERF=1) pada build produksi lokal, Chromium desktop 1366x860, kamera palsu. Disalin dari keluaran uji; test-results dihapus tiap run Playwright.",
+  "viewport": { "width": 1366, "height": 860 },
+  "heapStartMB": 9.7,
+  "sliderLatencyMs": { "n": 60, "mean": 75.97, "p50": 70, "p95": 120, "max": 137 },
+  "perPhotoAdjustMs": { "n": 544, "mean": 1.15, "p50": 1, "p95": 2.1, "max": 13.7 },
+  "perPhotoPixels": { "mean": 33277.53, "max": 35420 },
+  "cacheHits": 752,
+  "cacheAfter": { "entries": 32, "totalPx": 1044784 },
+  "longTasks": { "count": 0, "maxMs": 0 },
+  "heapAfterMB": 11.1,
+  "heapGrowthMB": 1.4,
+  "exportMs": { "neutralAsli": 395, "neutralCetak": 392, "adjustedAsli": 387, "adjustedCetak": 1018 }
+}

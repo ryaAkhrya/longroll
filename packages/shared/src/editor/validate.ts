@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { ADJUST_CONTROLS } from "../render/adjust";
 import { FILTER_PRESETS } from "../studio/config";
 import { FRAME_ADAPTS } from "../studio/types";
 import { decodePoints, elementsMap, historyArray, metaMap, readElement } from "./doc";
@@ -27,7 +28,19 @@ const num = (v: unknown, min: number, max: number) => typeof v === "number" && N
 const COLOR = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
 const issue = (code: IssueCode, detail: string): DocIssue => ({ code, detail });
 const FILTER_IDS = new Set<string>(FILTER_PRESETS.map((f) => f.id));
-const META_KEYS = new Set(["canvas", "frame", "frameStyle", "globalFilter", "schemaVersion", "layout"]);
+const META_KEYS = new Set(["canvas", "frame", "frameStyle", "globalFilter", "globalAdjust", "schemaVersion", "layout"]);
+const ADJUST_KEYS = new Map(ADJUST_CONTROLS.map((c) => [c.key as string, c]));
+
+/** Objek penyesuaian sah: hanya kunci dikenal, bilangan bulat dalam rentang, ≠ 0 (bentuk padat). */
+function adjustOk(v: unknown): boolean {
+  if (v === null) return true;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+    const c = ADJUST_KEYS.get(k);
+    if (!c || typeof n !== "number" || !Number.isInteger(n) || n < c.min || n > c.max) return false;
+  }
+  return true;
+}
 
 function validateElement(id: string, s: Record<string, unknown>, canvas: { w: number; h: number }, ctx: ValidateCtx): DocIssue | null {
   const type = s.type as ElementType;
@@ -53,6 +66,7 @@ function validateElement(id: string, s: Record<string, unknown>, canvas: { w: nu
       if (!c || !num(c.x, 0, 1) || !num(c.y, 0, 1) || !num(c.w, 0.02, 1) || !num(c.h, 0.02, 1) || (c.x as number) + (c.w as number) > 1.0001 || (c.y as number) + (c.h as number) > 1.0001) return issue("SCHEMA", `${id}: crop`);
       if (!num(s.zoom, 1, 4) || typeof s.flipX !== "boolean") return issue("SCHEMA", `${id}: zoom`);
       if (s.filter !== null && (typeof s.filter !== "string" || !FILTER_IDS.has(s.filter))) return issue("SCHEMA", `${id}: filter`);
+      if (s.adjust !== undefined && !adjustOk(s.adjust)) return issue("SCHEMA", `${id}: adjust`);
       if (s.radius !== undefined && !num(s.radius, 0, 400)) return issue("SCHEMA", `${id}: radius`);
       if (s.slotId !== undefined && (typeof s.slotId !== "string" || s.slotId.length > 40)) return issue("SCHEMA", `${id}: slot`);
       if (typeof s.ownerName !== "string" || s.ownerName.length > 40) return issue("SCHEMA", `${id}: nama`);
@@ -101,6 +115,8 @@ export function validateDoc(doc: Y.Doc, ctx: ValidateCtx): DocIssue | null {
   }
   const fs = meta.get("frameStyle") as { bgColor?: unknown; overlayOpacity?: unknown } | undefined;
   if (fs && (typeof fs.bgColor !== "string" || !COLOR.test(fs.bgColor) || !num(fs.overlayOpacity, 0.5, 1))) return issue("SCHEMA", "meta.frameStyle");
+  const ga = meta.get("globalAdjust");
+  if (ga !== undefined && !adjustOk(ga)) return issue("SCHEMA", "meta.globalAdjust");
   const layout = meta.get("layout");
   if (layout !== undefined && (typeof layout !== "string" || layout.length > 200_000)) return issue("SCHEMA", "meta.layout");
 

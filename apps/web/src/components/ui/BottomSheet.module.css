@@ -12,6 +12,11 @@
 }
 .half { height: 45dvh; min-height: 280px; }
 .full { height: 90dvh; }
+/* Landscape HP (tinggi ≤ 500 px): 45dvh hanya ±175 px; pakai hampir seluruh tinggi supaya isi panel (galeri frame, layout) terbaca. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .half { height: 88dvh; min-height: 0; }
+  .full { height: 94dvh; }
+}
 :global([data-theme="stage"]) .sheet { background: var(--stage2); }
 
 .handleArea { display: grid; place-items: center; height: 24px; cursor: grab; touch-action: none; }

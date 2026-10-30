@@ -1,8 +1,10 @@
 import { filterCss } from "../studio/config";
-import { FONT_STACK } from "../studio/scene";
+import { FONT_STACK, SHAPE_PATHS } from "../studio/scene";
 import type { Scene, SceneDecor } from "../studio/scene";
 import type { FilterPresetId, Fill } from "../studio/types";
 import { decodePoints } from "../editor/doc";
+import { NEUTRAL_ADJUST, isNeutral, sanitizeAdjust } from "./adjust";
+import type { Adjust } from "./adjust";
 import { stickerAsset } from "../editor/schema";
 import type { CropRect, EditorMeta, ElementSnapshot } from "../editor/schema";
 
@@ -43,6 +45,10 @@ export interface Ctx2D {
   textAlign: string;
   textBaseline: string;
   filter: string;
+  shadowColor?: string;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
 }
 
 export interface ImageLike {
@@ -50,7 +56,26 @@ export interface ImageLike {
   naturalHeight: number;
 }
 
+/** Permintaan foto yang sudah dipotong + difilter + disesuaikan pada ukuran piksel tujuan (diproses & di-cache oleh klien). */
+export interface AdjustedPhotoRequest {
+  attemptId: string;
+  img: ImageLike;
+  crop: CropRect;
+  /** Ukuran piksel foto pada kanvas tujuan (setelah skala elemen & skala render/layar). */
+  pxW: number;
+  pxH: number;
+  /** Filter preset CSS (`ctx.filter`) yang diterapkan SEBELUM penyesuaian. "none" bila tak ada. */
+  filterCss: string;
+  adjust: Adjust;
+}
+
 export interface DrawResources {
+  /** Piksel kanvas per satuan dokumen (skala export, atau skala layar × devicePixelRatio di editor). Default 1. */
+  pixelScale?: number;
+  /** true bila `ctx.filter` tak berfungsi (Safari/WebKit): preset filter ikut diproses lewat jalur piksel `adjusted`. */
+  pixelFilters?: boolean;
+  /** Foto + penyesuaian piksel → kanvas hasil (ImageLike). null = tak tersedia (jatuh ke jalur tanpa penyesuaian). */
+  adjusted?(req: AdjustedPhotoRequest): ImageLike | null;
   /** Foto attempt (varian editor ≤1600 px atau full untuk export). null = belum/tidak termuat. */
   photo(attemptId: string): ImageLike | null;
   /** Artwork overlay frame custom. */
@@ -125,7 +150,14 @@ export function wrapLines(text: string, maxW: number, fontSize: number, ctx: Ctx
 
 // ---------------------------------------------------------------- tubuh elemen (koordinat lokal, pusat 0,0)
 
-export function drawPhotoBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null) {
+/** Penyesuaian efektif satu foto: milik foto (jika diset) menggantikan penyesuaian semua foto, sama seperti filter. */
+export function effectiveAdjust(e: ElementSnapshot, globalAdjust: Partial<Adjust> | null | undefined): Adjust | null {
+  const own = e.adjust === undefined || e.adjust === null ? null : sanitizeAdjust(e.adjust);
+  const a = own ?? (globalAdjust ? sanitizeAdjust(globalAdjust) : null);
+  return a && !isNeutral(a) ? a : null;
+}
+
+export function drawPhotoBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null, globalAdjust: Partial<Adjust> | null = null) {
   const w = Number(e.w);
   const h = Number(e.h);
   const crop = e.crop as CropRect;
@@ -133,9 +165,28 @@ export function drawPhotoBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources
   roundedRectPath(ctx, -w / 2, -h / 2, w, h, Number(e.radius ?? 0));
   ctx.clip();
   const img = res.photo(String(e.attemptId));
+  const css0 = filterCss((e.filter as FilterPresetId | null) ?? globalFilter);
+  const adj = img ? (effectiveAdjust(e, globalAdjust) ?? (res.pixelFilters && css0 !== "none" ? NEUTRAL_ADJUST : null)) : null;
+  if (img && adj && res.adjusted) {
+    const ps = res.pixelScale ?? 1;
+    const out = res.adjusted({
+      attemptId: String(e.attemptId),
+      img,
+      crop,
+      pxW: Math.max(1, Math.round(w * Math.abs(Number(e.scaleX)) * ps)),
+      pxH: Math.max(1, Math.round(h * Math.abs(Number(e.scaleY)) * ps)),
+      filterCss: css0,
+      adjust: adj,
+    });
+    if (out) {
+      if (e.flipX) ctx.scale(-1, 1);
+      ctx.drawImage(out, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      return;
+    }
+  }
   if (img) {
-    const css = filterCss((e.filter as FilterPresetId | null) ?? globalFilter);
-    if (css !== "none") ctx.filter = css;
+    if (css0 !== "none") ctx.filter = css0;
     if (e.flipX) ctx.scale(-1, 1);
     // Rasio crop sudah mengikuti rasio kotak (tanpa distorsi); sumber dipotong, bukan diregangkan.
     ctx.drawImage(img, crop.x * img.naturalWidth, crop.y * img.naturalHeight, crop.w * img.naturalWidth, crop.h * img.naturalHeight, -w / 2, -h / 2, w, h);
@@ -212,10 +263,10 @@ export function drawDoodleBody(ctx: Ctx2D, e: ElementSnapshot) {
 }
 
 /** Tubuh elemen menurut tipe (tanpa transformasi elemen). */
-export function drawElementBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null) {
+export function drawElementBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null, globalAdjust: Partial<Adjust> | null = null) {
   switch (e.type) {
     case "photo":
-      return drawPhotoBody(ctx, e, res, globalFilter);
+      return drawPhotoBody(ctx, e, res, globalFilter, globalAdjust);
     case "sticker":
       return drawStickerBody(ctx, e, res);
     case "text":
@@ -226,13 +277,13 @@ export function drawElementBody(ctx: Ctx2D, e: ElementSnapshot, res: DrawResourc
 }
 
 /** Elemen lengkap: translate(x,y) → rotate → scale → opacity → tubuh. Urutan transform sama untuk editor & export. */
-export function drawElement(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null) {
+export function drawElement(ctx: Ctx2D, e: ElementSnapshot, res: DrawResources, globalFilter: FilterPresetId | null, globalAdjust: Partial<Adjust> | null = null) {
   ctx.save();
   ctx.translate(Number(e.x), Number(e.y));
   ctx.rotate((Number(e.rotation) * Math.PI) / 180);
   ctx.scale(Number(e.scaleX), Number(e.scaleY));
   ctx.globalAlpha = Number(e.opacity);
-  drawElementBody(ctx, e, res, globalFilter);
+  drawElementBody(ctx, e, res, globalFilter, globalAdjust);
   ctx.restore();
 }
 
@@ -270,9 +321,19 @@ export function drawBackground(ctx: Ctx2D, scene: Pick<Scene, "background" | "wi
   ctx.restore();
 }
 
-export function drawDecorItem(ctx: Ctx2D, d: SceneDecor) {
+export function drawDecorItem(ctx: Ctx2D, d: SceneDecor, res?: Pick<DrawResources, "path">) {
   ctx.save();
-  if (d.kind === "rect") {
+  if (d.kind === "shape") {
+    if (res) {
+      ctx.translate(d.x, d.y);
+      ctx.rotate((d.rotation * Math.PI) / 180);
+      ctx.scale(d.size / 100, d.size / 100);
+      ctx.translate(-50, -50);
+      ctx.globalAlpha = d.opacity;
+      ctx.fillStyle = d.color;
+      ctx.fill(res.path(SHAPE_PATHS[d.shape]));
+    }
+  } else if (d.kind === "rect") {
     ctx.translate(d.x + d.w / 2, d.y + d.h / 2);
     ctx.rotate((d.rotation * Math.PI) / 180);
     ctx.globalAlpha = d.opacity;
@@ -311,11 +372,52 @@ export function drawFrameLayers(ctx: Ctx2D, scene: Pick<Scene, "overlay" | "deco
     for (const o of scene.overlay.ops) ctx.drawImage(res.overlay, o.sx, o.sy, o.sw, o.sh, o.dx, o.dy, o.dw, o.dh);
     ctx.restore();
   }
-  for (const d of scene.decor) drawDecorItem(ctx, d);
+  for (const d of scene.decor) drawDecorItem(ctx, d, res);
+}
+
+/** Transformasi ke ruang slot: pusat slot → rotasi → sudut kiri-atas slot (sama dengan `center()` di kanvas studio). */
+function toSlot(ctx: Ctx2D, s: Scene["slots"][number]) {
+  ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+  ctx.rotate((s.rotation * Math.PI) / 180);
+  ctx.translate(-s.w / 2, -s.h / 2);
+}
+
+/**
+ * Kartu slot (bingkai polaroid + bayangan) DI BAWAH foto. Sebelumnya hanya digambar di pratinjau studio, sehingga editor dan
+ * export kehilangan bingkai polaroid; sekarang satu jalur yang sama untuk semuanya.
+ */
+export function drawSlotBases(ctx: Ctx2D, scene: Pick<Scene, "slots">) {
+  for (const s of [...scene.slots].sort((a, b) => a.z - b.z)) {
+    if (!s.frameFill) continue;
+    ctx.save();
+    toSlot(ctx, s);
+    if (s.shadow) {
+      ctx.shadowColor = "rgba(0,0,0,0.22)";
+      ctx.shadowBlur = s.w * 0.04;
+      ctx.shadowOffsetY = s.w * 0.015;
+    }
+    ctx.fillStyle = s.frameFill;
+    ctx.fillRect(0, 0, s.w, s.h);
+    ctx.restore();
+  }
+}
+
+/** Garis tepi foto (stroke slot) DI ATAS foto. */
+export function drawSlotStrokes(ctx: Ctx2D, scene: Pick<Scene, "slots">) {
+  for (const s of [...scene.slots].sort((a, b) => a.z - b.z)) {
+    if (!s.stroke) continue;
+    ctx.save();
+    toSlot(ctx, s);
+    ctx.strokeStyle = s.stroke.color;
+    ctx.lineWidth = s.stroke.width;
+    roundedRectPath(ctx, s.photo.x, s.photo.y, s.photo.w, s.photo.h, s.photo.radius);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 export interface DocumentModel {
-  meta: Pick<EditorMeta, "canvas" | "globalFilter" | "frameStyle">;
+  meta: Pick<EditorMeta, "canvas" | "globalFilter" | "frameStyle"> & { globalAdjust?: Partial<Adjust> | null };
   elements: (ElementSnapshot & { id: string; z: string })[];
   scene: Scene | null;
 }
@@ -324,7 +426,9 @@ export interface DocumentModel {
  * Seluruh hasil sesi pada skala `scale` (seragam). Urutan = tampilan editor: latar → foto (z) → frame (overlay+dekor)
  * → stiker/teks/coretan (z). `clip` (opsional) menggambar hanya satu tile besar: tile digeser & dipotong di sini.
  */
-export function drawDocument(ctx: Ctx2D, doc: DocumentModel, res: DrawResources, scale: number, tile?: { x: number; y: number; w: number; h: number }) {
+export function drawDocument(ctx: Ctx2D, doc: DocumentModel, resIn: DrawResources, scale: number, tile?: { x: number; y: number; w: number; h: number }) {
+  // Skala render menentukan ukuran piksel foto yang diproses (export 2× = piksel 2×; pratinjau mengikuti skala layar).
+  const res: DrawResources = resIn.pixelScale === scale ? resIn : { ...resIn, pixelScale: scale };
   ctx.save();
   if (tile) {
     ctx.beginPath();
@@ -335,14 +439,20 @@ export function drawDocument(ctx: Ctx2D, doc: DocumentModel, res: DrawResources,
   ctx.scale(scale, scale);
   const W = doc.meta.canvas.w;
   const H = doc.meta.canvas.h;
-  if (doc.scene) drawBackground(ctx, doc.scene, res);
-  else {
+  if (doc.scene) {
+    drawBackground(ctx, doc.scene, res);
+    drawSlotBases(ctx, doc.scene);
+  } else {
     ctx.fillStyle = doc.meta.frameStyle.bgColor;
     ctx.fillRect(0, 0, W, H);
   }
   const visible = doc.elements.filter((e) => !e.hidden);
-  for (const e of visible) if (e.type === "photo") drawElement(ctx, e, res, doc.meta.globalFilter);
-  if (doc.scene) drawFrameLayers(ctx, doc.scene, res, doc.meta.frameStyle.overlayOpacity);
-  for (const e of visible) if (e.type !== "photo") drawElement(ctx, e, res, doc.meta.globalFilter);
+  const ga = doc.meta.globalAdjust ?? null;
+  for (const e of visible) if (e.type === "photo") drawElement(ctx, e, res, doc.meta.globalFilter, ga);
+  if (doc.scene) {
+    drawSlotStrokes(ctx, doc.scene);
+    drawFrameLayers(ctx, doc.scene, res, doc.meta.frameStyle.overlayOpacity);
+  }
+  for (const e of visible) if (e.type !== "photo") drawElement(ctx, e, res, doc.meta.globalFilter, ga);
   ctx.restore();
 }

@@ -4,7 +4,8 @@ import type Konva from "konva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Layer, Line, Rect, Shape, Stage, Text, Transformer } from "react-konva";
 import { decodePoints, drawBackground, drawElementBody, drawFrameLayers, elementBounds } from "@longroll/shared";
-import type { DrawResources, EditorMeta, ElementView, FilterPresetId, FrameTemplate, StudioState } from "@longroll/shared";
+import { compactAdjust } from "@longroll/shared";
+import type { Adjust, DrawResources, EditorMeta, ElementView, FilterPresetId, FrameTemplate, StudioState } from "@longroll/shared";
 import { attemptUrl } from "@/capture/attemptUrls";
 import { useFrameImage } from "@/components/studio/canvas/assets";
 import type { AwarenessState } from "@/editor/provider";
@@ -53,6 +54,8 @@ interface Props {
   onDoodle: (points: [number, number][]) => void;
   onLocalAwareness: (patch: Partial<AwarenessState>) => void;
   onZoom: (z: number) => void;
+  /** Pratinjau lokal saat slider digeser (belum disimpan ke dokumen). target: "all" = semua foto, selain itu id elemen foto. */
+  adjustDraft?: { target: string; adjust: Adjust | null } | null;
 }
 
 /** Warna pemain sebagai nilai literal (kanvas tidak memahami var CSS). */
@@ -114,7 +117,7 @@ function hitRect(e: ElementView): { x: number; y: number; w: number; h: number }
  * Badan elemen digambar oleh `drawElementBody` (paket shared) — fungsi yang sama dengan export. Konva hanya
  * menyediakan transformasi grup, hit-test, dan Transformer.
  */
-function BodyShape({ e, res, global, note, onRetry }: { e: ElementView; res: DrawResources; global: FilterPresetId | null; note?: string; onRetry?: () => void }) {
+function BodyShape({ e, res, global, adj, note, onRetry }: { e: ElementView; res: DrawResources; global: FilterPresetId | null; adj: EditorMeta["globalAdjust"]; note?: string; onRetry?: () => void }) {
   const r = hitRect(e);
   return (
     <Shape
@@ -129,7 +132,7 @@ function BodyShape({ e, res, global, note, onRetry }: { e: ElementView; res: Dra
         // Titik asal tubuh = pusat elemen; Shape berada di (r.x, r.y) sehingga digeser balik.
         raw.save();
         raw.translate(-r.x, -r.y);
-        drawElementBody(asCtx(raw), e, res, global);
+        drawElementBody(asCtx(raw), e, res, global, adj ?? null);
         if (note) {
           raw.fillStyle = "rgba(255,255,255,0.75)";
           raw.font = "600 22px sans-serif";
@@ -150,17 +153,18 @@ function BodyShape({ e, res, global, note, onRetry }: { e: ElementView; res: Dra
   );
 }
 
-function PhotoShape({ e, code, global, res }: { e: ElementView; code: string; global: FilterPresetId | null; res: DrawResources }) {
+function PhotoShape({ e, code, global, adj, res }: { e: ElementView; code: string; global: FilterPresetId | null; adj: EditorMeta["globalAdjust"]; res: DrawResources }) {
   const { img, failed, retry } = usePhotoImage(code, String(e.attemptId));
   // Gambar foto ini disuntikkan lewat resources khusus elemen; foto lain tidak relevan untuk badan ini.
   const own = useMemo<DrawResources>(() => ({ ...res, photo: (id) => (id === String(e.attemptId) ? img : null) }), [res, img, e.attemptId]);
-  return <BodyShape e={e} res={own} global={global} note={img ? undefined : failed ? "Foto gagal dimuat · ketuk ulang" : "Memuat foto…"} onRetry={failed ? retry : undefined} />;
+  return <BodyShape e={e} res={own} global={global} adj={adj} note={img ? undefined : failed ? "Foto gagal dimuat · ketuk ulang" : "Memuat foto…"} onRetry={failed ? retry : undefined} />;
 }
 
 interface NodeProps {
   e: ElementView;
   code: string;
   global: FilterPresetId | null;
+  adj: EditorMeta["globalAdjust"];
   res: DrawResources;
   draggable: boolean;
   override?: { x: number; y: number; rotation: number; scaleX: number; scaleY: number };
@@ -172,7 +176,7 @@ interface NodeProps {
   nodeRef: (id: string, n: Konva.Group | null) => void;
 }
 
-function ElementNode({ e, code, global, res, draggable, override, locks, onSelect, onDragMove, onDragEnd, onDblClick, nodeRef }: NodeProps) {
+function ElementNode({ e, code, global, adj, res, draggable, override, locks, onSelect, onDragMove, onDragEnd, onDblClick, nodeRef }: NodeProps) {
   const b = elementBounds(e);
   const t = override ?? { x: Number(e.x), y: Number(e.y), rotation: Number(e.rotation), scaleX: Number(e.scaleX), scaleY: Number(e.scaleY) };
   return (
@@ -193,7 +197,7 @@ function ElementNode({ e, code, global, res, draggable, override, locks, onSelec
       onDblClick={() => e.type === "text" && onDblClick(e.id)}
       onDblTap={() => e.type === "text" && onDblClick(e.id)}
     >
-      {e.type === "photo" ? <PhotoShape e={e} code={code} global={global} res={res} /> : <BodyShape e={e} res={res} global={global} />}
+      {e.type === "photo" ? <PhotoShape e={e} code={code} global={global} adj={adj} res={res} /> : <BodyShape e={e} res={res} global={global} adj={adj} />}
       {locks.map((p, i) => (
         <Rect key={p.id} x={-b.w / 2 - 4 - i * 3} y={-b.h / 2 - 4 - i * 3} width={b.w + 8 + i * 6} height={b.h + 8 + i * 6} stroke={PLAYER_HEX[p.color] ?? "#fff"} strokeWidth={3} listening={false} cornerRadius={4} />
       ))}
@@ -234,8 +238,13 @@ export function EditorCanvas(p: Props) {
   const overlayId = scene?.overlay?.frameId ?? null;
   const { img: overlayImg } = useFrameImage(overlayId ? p.code : null, overlayId);
 
-  const res = useMemo(() => makeResources({ photo: () => null, overlay: overlayImg, scale }), [overlayImg, scale]);
-  const visible = p.elements.filter((e) => !e.hidden);
+  // Piksel foto yang diproses mengikuti skala layar × rasio piksel perangkat (maks 2×): tajam tanpa memproses lebih dari perlu.
+  const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  const res = useMemo(() => ({ ...makeResources({ photo: () => null, overlay: overlayImg, scale }), pixelScale: scale * dpr }), [overlayImg, scale, dpr]);
+  const adjDraft = p.adjustDraft ?? null;
+  const globalAdj = useMemo(() => (adjDraft && adjDraft.target === "all" ? compactAdjust(adjDraft.adjust) : (p.meta.globalAdjust ?? null)), [adjDraft, p.meta.globalAdjust]);
+  const elementsEff = useMemo(() => (adjDraft && adjDraft.target !== "all" ? p.elements.map((e) => (e.id === adjDraft.target ? { ...e, adjust: compactAdjust(adjDraft.adjust) } : e)) : p.elements), [adjDraft, p.elements]);
+  const visible = elementsEff.filter((e) => !e.hidden);
   const below = visible.filter((e) => e.type === "photo");
   const above = visible.filter((e) => e.type !== "photo");
   const overrides = useMemo(() => {
@@ -359,7 +368,7 @@ export function EditorCanvas(p: Props) {
   const stageH = Math.max(1, box.h);
 
   return (
-    <div ref={wrapRef} className={cx(styles.wrap, p.tool === "doodle" && styles.draw)} data-testid="editor-canvas" data-elements={visible.length} data-zoom={p.zoom} role="application" aria-label={p.label}>
+    <div ref={wrapRef} className={cx(styles.wrap, p.tool === "doodle" && styles.draw)} data-testid="editor-canvas" data-elements={visible.length} data-zoom={p.zoom} data-doc={`${Math.round(offX)},${Math.round(offY)},${Math.round(W * scale)},${Math.round(H * scale)}`} role="application" aria-label={p.label}>
       {scale > 0 && (
         <Stage
           ref={stageRef}
@@ -394,7 +403,7 @@ export function EditorCanvas(p: Props) {
           <Layer>
             <Rect name="bg" width={W} height={H} fill="rgba(0,0,0,0.001)" />
             {below.map((e) => (
-              <ElementNode key={e.id} e={e} code={p.code} global={p.meta.globalFilter} res={res} draggable={draggable} override={overrides.get(e.id)} locks={locksFor(e.id)} onSelect={select} onDragMove={transient} onDragEnd={commit} onDblClick={p.onEditText} nodeRef={nodeRef} />
+              <ElementNode key={e.id} e={e} code={p.code} global={p.meta.globalFilter} adj={globalAdj} res={res} draggable={draggable} override={overrides.get(e.id)} locks={locksFor(e.id)} onSelect={select} onDragMove={transient} onDragEnd={commit} onDblClick={p.onEditText} nodeRef={nodeRef} />
             ))}
           </Layer>
           <Layer listening={false}>
@@ -402,7 +411,7 @@ export function EditorCanvas(p: Props) {
           </Layer>
           <Layer>
             {above.map((e) => (
-              <ElementNode key={e.id} e={e} code={p.code} global={p.meta.globalFilter} res={res} draggable={draggable} override={overrides.get(e.id)} locks={locksFor(e.id)} onSelect={select} onDragMove={transient} onDragEnd={commit} onDblClick={p.onEditText} nodeRef={nodeRef} />
+              <ElementNode key={e.id} e={e} code={p.code} global={p.meta.globalFilter} adj={globalAdj} res={res} draggable={draggable} override={overrides.get(e.id)} locks={locksFor(e.id)} onSelect={select} onDragMove={transient} onDragEnd={commit} onDblClick={p.onEditText} nodeRef={nodeRef} />
             ))}
             <Transformer
               ref={trRef}

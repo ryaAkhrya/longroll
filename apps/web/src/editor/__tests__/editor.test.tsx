@@ -241,6 +241,8 @@ function controller(elements: ElementView[], over: Partial<EditorController> = {
     z: vi.fn(),
     setFrame: vi.fn(),
     setGlobalFilter: vi.fn(),
+    setGlobalAdjust: vi.fn(),
+    setPhotoAdjust: vi.fn(),
     revert: vi.fn(() => ({ ok: true as const })),
     nameOf: (id) => id,
     ...over,

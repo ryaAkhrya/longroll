@@ -1,4 +1,5 @@
-.panel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; color: #fff; }
+/* Panel mengisi drawer; isi yang lebih tinggi (mis. Layout di layar 768 px) bergulir di dalam panel, tidak terpotong. */
+.panel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; color: #fff; }
 .compact { gap: 12px; }
 .head { display: flex; align-items: center; gap: 10px; }
 .title { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
@@ -34,7 +35,8 @@
   background: #fff; color: var(--stage);
 }
 .lookers { position: absolute; right: 6px; top: 6px; z-index: 2; display: flex; gap: 2px; }
-.thumbArt > .thumbCanvas { inset: 8px; }
+.lazy { position: absolute; inset: 0; }
+.thumbArt .thumbCanvas { inset: 8px; }
 .thumbName { font-size: 13px; font-weight: 700; margin-top: 6px; }
 .thumbCat { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 .emptyList { grid-column: 1 / -1; font-size: 13px; color: rgba(255, 255, 255, 0.6); padding: 12px 0; }

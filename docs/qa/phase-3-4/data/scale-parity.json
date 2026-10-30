@@ -1,0 +1,653 @@
+[
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Seoul Strip · KOREAN",
+    "mae": 1.32,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Editorial · MINIMAL",
+    "mae": 1.45,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Linen · MINIMAL",
+    "mae": 1.21,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Classic Black · MONO",
+    "mae": 2.78,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Mono Press · MONO",
+    "mae": 2.98,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Film 400 · RETRO",
+    "mae": 2,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Super 8 · RETRO",
+    "mae": 1.79,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Contact Sheet · RETRO",
+    "mae": 2.47,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "VHS Night · RETRO",
+    "mae": 1.3,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Sunset Stripe · RETRO",
+    "mae": 2.48,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Polaroid Classic · POLAROID",
+    "mae": 3.86,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Instax Mini · POLAROID",
+    "mae": 3.66,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Scrapbook · SCRAPBOOK",
+    "mae": 3.97,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Magazine · EDITORIAL",
+    "mae": 1.65,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Gallery Wall · EDITORIAL",
+    "mae": 3.58,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Lilac Dream · PASTEL",
+    "mae": 1.38,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Mint Soda · PASTEL",
+    "mae": 1.55,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Date Night · COUPLE",
+    "mae": 2.45,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Rose · COUPLE",
+    "mae": 1.26,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Bestie Club · FRIENDS",
+    "mae": 2.26,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Geng · FRIENDS",
+    "mae": 1.66,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Merdeka · SEASON",
+    "mae": 2.1,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Holiday · SEASON",
+    "mae": 2.41,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_STRIP",
+    "name": "Mosaic · GRID",
+    "mae": 1.45,
+    "sizeSmall": "132x391",
+    "sizeBig": "528x1563"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Seoul Strip · KOREAN",
+    "mae": 0.6,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Editorial · MINIMAL",
+    "mae": 0.68,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Linen · MINIMAL",
+    "mae": 0.52,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Classic Black · MONO",
+    "mae": 1.82,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Mono Press · MONO",
+    "mae": 2.16,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Film 400 · RETRO",
+    "mae": 0.96,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Super 8 · RETRO",
+    "mae": 0.86,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Contact Sheet · RETRO",
+    "mae": 2.1,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "VHS Night · RETRO",
+    "mae": 0.84,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Sunset Stripe · RETRO",
+    "mae": 3.5,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Polaroid Classic · POLAROID",
+    "mae": 2.99,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Polaroid Pile · POLAROID",
+    "mae": 2.8,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Instax Mini · POLAROID",
+    "mae": 3.13,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Scrapbook · SCRAPBOOK",
+    "mae": 3.16,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Magazine · EDITORIAL",
+    "mae": 1.45,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Gallery Wall · EDITORIAL",
+    "mae": 3.05,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Lilac Dream · PASTEL",
+    "mae": 1.03,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Mint Soda · PASTEL",
+    "mae": 1.32,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Date Night · COUPLE",
+    "mae": 1.56,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Rose · COUPLE",
+    "mae": 0.73,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Bestie Club · FRIENDS",
+    "mae": 1.33,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Geng · FRIENDS",
+    "mae": 0.8,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Merdeka · SEASON",
+    "mae": 1.26,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Holiday · SEASON",
+    "mae": 1.24,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "PHOTO_GRID",
+    "name": "Mosaic · GRID",
+    "mae": 1.14,
+    "sizeSmall": "352x168",
+    "sizeBig": "1408x671"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Seoul Strip · KOREAN",
+    "mae": 0.76,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Editorial · MINIMAL",
+    "mae": 0.94,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Linen · MINIMAL",
+    "mae": 0.69,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Classic Black · MONO",
+    "mae": 1.38,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Mono Press · MONO",
+    "mae": 1.32,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "VHS Night · RETRO",
+    "mae": 0.88,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Sunset Stripe · RETRO",
+    "mae": 3.03,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Polaroid Classic · POLAROID",
+    "mae": 4.49,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Polaroid Pile · POLAROID",
+    "mae": 3.79,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Instax Mini · POLAROID",
+    "mae": 4.44,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Scrapbook · SCRAPBOOK",
+    "mae": 4.42,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Magazine · EDITORIAL",
+    "mae": 1.21,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Gallery Wall · EDITORIAL",
+    "mae": 4.54,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Lilac Dream · PASTEL",
+    "mae": 1.05,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Mint Soda · PASTEL",
+    "mae": 1.34,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Date Night · COUPLE",
+    "mae": 1.34,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Rose · COUPLE",
+    "mae": 0.82,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Bestie Club · FRIENDS",
+    "mae": 1.23,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Geng · FRIENDS",
+    "mae": 0.72,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Merdeka · SEASON",
+    "mae": 0.83,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Holiday · SEASON",
+    "mae": 1.1,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "GROUP_SHOT",
+    "name": "Mosaic · GRID",
+    "mae": 1.05,
+    "sizeSmall": "396x271",
+    "sizeBig": "1584x1085"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Seoul Strip · KOREAN",
+    "mae": 0.71,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Editorial · MINIMAL",
+    "mae": 0.87,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Linen · MINIMAL",
+    "mae": 0.63,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Classic Black · MONO",
+    "mae": 0.41,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Mono Press · MONO",
+    "mae": 0.56,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "VHS Night · RETRO",
+    "mae": 0.97,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Sunset Stripe · RETRO",
+    "mae": 2.94,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Polaroid Classic · POLAROID",
+    "mae": 2.98,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Polaroid Pile · POLAROID",
+    "mae": 2.53,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Instax Mini · POLAROID",
+    "mae": 2.83,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Scrapbook · SCRAPBOOK",
+    "mae": 2.99,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Magazine · EDITORIAL",
+    "mae": 0.74,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Gallery Wall · EDITORIAL",
+    "mae": 2.88,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Lilac Dream · PASTEL",
+    "mae": 0.92,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Mint Soda · PASTEL",
+    "mae": 1.14,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Date Night · COUPLE",
+    "mae": 0.61,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Rose · COUPLE",
+    "mae": 0.7,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Bestie Club · FRIENDS",
+    "mae": 1.05,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Geng · FRIENDS",
+    "mae": 0.4,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Merdeka · SEASON",
+    "mae": 0.52,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Holiday · SEASON",
+    "mae": 0.64,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  },
+  {
+    "mode": "FREEFORM_COLLAGE",
+    "name": "Mosaic · GRID",
+    "mae": 0.97,
+    "sizeSmall": "352x373",
+    "sizeBig": "1408x1492"
+  }
+]

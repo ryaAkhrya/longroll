@@ -4,6 +4,8 @@ import { acceptedForCell } from "../capture";
 import type { CaptureState } from "../capture";
 import { buildScene } from "../studio/scene";
 import { builtinFrame } from "../studio/frames";
+import { compactAdjust } from "../render/adjust";
+import type { Adjust } from "../render/adjust";
 import type { FilterPresetId, FrameRef, FrameTemplate, StudioState } from "../studio/types";
 import { EDITOR_LIMITS, STICKER_IDS, TYPE_KEYS } from "./schema";
 import type { CropRect, EditorMeta, ElementSnapshot, ElementType, HistoryEntry, TextAlign, TextFontStyle } from "./schema";
@@ -68,7 +70,9 @@ export interface ElementView extends ElementSnapshot {
 export function listElements(doc: Y.Doc): ElementView[] {
   const out: ElementView[] = [];
   elementsMap(doc).forEach((el, id) => out.push({ ...readElement(el), id } as ElementView));
-  return out.sort((a, b) => (a.z < b.z ? -1 : a.z > b.z ? 1 : a.id < b.id ? -1 : 1));
+  // z non-string (data rusak) dianggap "" agar komparator tetap total dan urutannya sama di semua klien.
+  const zOf = (e: ElementView) => (typeof e.z === "string" ? e.z : "");
+  return out.sort((a, b) => (zOf(a) < zOf(b) ? -1 : zOf(a) > zOf(b) ? 1 : a.id < b.id ? -1 : 1));
 }
 
 export function readMeta(doc: Y.Doc): EditorMeta | null {
@@ -80,6 +84,7 @@ export function readMeta(doc: Y.Doc): EditorMeta | null {
     frame: (m.get("frame") as string | null | undefined) ?? null,
     frameStyle: (m.get("frameStyle") as EditorMeta["frameStyle"] | undefined) ?? { bgColor: "#FFFFFF", overlayOpacity: 1 },
     globalFilter: (m.get("globalFilter") as FilterPresetId | null | undefined) ?? null,
+    globalAdjust: (m.get("globalAdjust") as EditorMeta["globalAdjust"] | undefined) ?? null,
     schemaVersion: 1,
   };
 }
@@ -120,10 +125,11 @@ function pushHistory(doc: Y.Doc, ctx: EditorCtx, e: Omit<HistoryEntry, "id" | "a
   const arr = historyArray(doc);
   const at = nowOf(ctx);
   const last = arr.length ? arr.get(arr.length - 1) : null;
-  // Digabung per elemen per peserta dalam 2 detik (11 §7.2): before dari entri awal, after dari yang terbaru.
+  // Digabung per elemen per peserta dalam 2 detik (11 §7.2): after dari yang terbaru; before dari entri awal, dilengkapi
+  // nilai-sebelum untuk kunci yang baru muncul di entri berikutnya (tanpa itu, balikin menulis null ke kunci tsb, mis. `z`).
   if (last && e.elementId && last.elementId === e.elementId && last.by === ctx.participantId && !e.revertOf && !last.revertOf && at - last.at < EDITOR_LIMITS.historyMergeMs && last.after && e.after && last.before !== null) {
     arr.delete(arr.length - 1, 1);
-    arr.push([{ ...last, at, after: { ...last.after, ...e.after }, label: e.label }]);
+    arr.push([{ ...last, at, before: e.before ? { ...e.before, ...last.before } : last.before, after: { ...last.after, ...e.after }, label: e.label }]);
     return;
   }
   arr.push([{ id: newId("h"), at, by: ctx.participantId, ...e }]);
@@ -214,6 +220,8 @@ export const commitTransform = (doc: Y.Doc, ctx: EditorCtx, id: string, t: { x: 
 
 export const setCrop = (doc: Y.Doc, ctx: EditorCtx, id: string, crop: CropRect, zoom: number) => updateElement(doc, ctx, id, { crop, zoom }, "crop foto");
 export const setPhotoFilter = (doc: Y.Doc, ctx: EditorCtx, id: string, filter: FilterPresetId | null) => updateElement(doc, ctx, id, { filter }, "filter foto");
+/** Penyesuaian satu foto (null = ikut penyesuaian semua foto). Nilai dipadatkan: hanya kunci ≠ 0. */
+export const setPhotoAdjust = (doc: Y.Doc, ctx: EditorCtx, id: string, adjust: Adjust | null) => updateElement(doc, ctx, id, { adjust: compactAdjust(adjust) }, "atur foto");
 
 export function setZ(doc: Y.Doc, ctx: EditorCtx, id: string, mode: "front" | "back" | "up" | "down" | { steps: number }): boolean {
   const list = listElements(doc);
@@ -293,6 +301,19 @@ export function setFrame(doc: Y.Doc, ctx: EditorCtx, frame: FrameRef | null, nam
   return true;
 }
 
+/** Penyesuaian untuk semua foto (non-destruktif). Netral/null menghapus kunci. Satu entri riwayat per perubahan (Balikin). */
+export function setGlobalAdjust(doc: Y.Doc, ctx: EditorCtx, adjust: Adjust | null): boolean {
+  const m = metaMap(doc);
+  const next = compactAdjust(adjust);
+  const before = (m.get("globalAdjust") as Partial<Adjust> | null | undefined) ?? null;
+  if (JSON.stringify(before) === JSON.stringify(next)) return false;
+  doc.transact(() => {
+    m.set("globalAdjust", next);
+    pushHistory(doc, ctx, { label: next ? "atur semua foto" : "reset atur foto", elementId: null, metaKey: "globalAdjust", before: { globalAdjust: before }, after: { globalAdjust: next } });
+  }, ctx.origin);
+  return true;
+}
+
 export function setGlobalFilter(doc: Y.Doc, ctx: EditorCtx, filter: FilterPresetId | null): boolean {
   const m = metaMap(doc);
   if ((m.get("globalFilter") ?? null) === filter) return false;
@@ -366,6 +387,8 @@ export function revertEntry(doc: Y.Doc, ctx: EditorCtx, entryId: string, force =
   }
   doc.transact(() => {
     for (const k of keys) {
+      // Entri lama hasil penggabungan bisa tak punya nilai-sebelum untuk sebuah kunci: jangan menimpanya dengan null.
+      if (!(k in entry.before!)) continue;
       const v = entry.before![k] ?? null;
       if (k === "content") {
         const t = el.get("content");
@@ -376,7 +399,8 @@ export function revertEntry(doc: Y.Doc, ctx: EditorCtx, entryId: string, force =
       } else el.set(k, v);
     }
     el.set("updatedBy", ctx.participantId);
-    pushHistory(doc, ctx, { label, elementId: id, before: cur, after: Object.fromEntries(keys.map((k) => [k, entry.before![k] ?? null])), revertOf: entry.id });
+    const applied = keys.filter((k) => k in entry.before!);
+    pushHistory(doc, ctx, { label, elementId: id, before: Object.fromEntries(applied.map((k) => [k, cur[k] ?? null])), after: Object.fromEntries(applied.map((k) => [k, entry.before![k] ?? null])), revertOf: entry.id });
   }, ctx.origin);
   return { ok: true };
 }

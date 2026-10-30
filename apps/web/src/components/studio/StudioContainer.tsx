@@ -198,6 +198,7 @@ export function StudioContainer({ client, room, session, meId, clockOffsetMs, in
             participants={room.participants}
             meId={meId}
             code={room.code}
+            mode={session.mode ?? undefined}
             previewId={preview?.ref.frameId ?? null}
             onPreview={doPreview}
             onApply={() => void applyFrame()}

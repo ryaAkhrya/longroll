@@ -1,9 +1,10 @@
 "use client";
 
 import { Check, Search, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
-import { FRAME_CATEGORY_LABEL } from "@longroll/shared";
-import type { FrameCategory, FrameRef, FrameTemplate, ParticipantView, StudioState } from "@longroll/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { FRAME_CATEGORY_LABEL, FRAME_CATEGORY_ORDER } from "@longroll/shared";
+import type { FrameCategory, FrameRef, FrameTemplate, Mode, ParticipantView, StudioState } from "@longroll/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { ChipButton } from "@/components/ui/Chip";
@@ -13,7 +14,36 @@ import { cx } from "@/lib/cx";
 import { StudioCanvas } from "../canvas";
 import styles from "./panels.module.css";
 
-const CATEGORIES: (FrameCategory | "ALL")[] = ["ALL", "KOREAN", "MINIMAL", "RETRO", "SCRAPBOOK", "PASTEL", "GRID", "CUSTOM"];
+/** Thumbnail baru dibuat saat mendekati layar (tiap thumbnail = 2 kanvas Konva; 25+ frame tidak boleh dibuat sekaligus). */
+function LazyMount({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser tanpa IntersectionObserver: tampilkan langsung (tanpa lazy)
+      setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "160px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  return (
+    <div ref={ref} className={styles.lazy}>
+      {seen ? children : null}
+    </div>
+  );
+}
 
 interface FramePanelProps {
   studio: StudioState;
@@ -21,6 +51,8 @@ interface FramePanelProps {
   participants: ParticipantView[];
   meId: string | null;
   code: string;
+  /** Mode sesi: frame bawaan yang tidak cocok dengan mode ini tidak ditampilkan (frame custom tidak dibatasi). */
+  mode?: Mode;
   /** frameId yang sedang dilihat (pratinjau lokal). */
   previewId: string | null;
   onPreview: (ref: FrameRef, template: FrameTemplate) => void;
@@ -41,9 +73,12 @@ export function FramePanel(props: FramePanelProps) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<FrameCategory | "ALL">("ALL");
   const applied = studio.frame?.frameId ?? null;
+  // Hanya frame yang cocok dengan mode (+ frame yang sedang terpasang, apa pun modenya) dan hanya kategori yang punya isi.
+  const usable = useMemo(() => frames.filter((f) => f.template.category === "CUSTOM" || !props.mode || f.template.modes.includes(props.mode) || f.ref.frameId === applied), [frames, props.mode, applied]);
+  const categories = useMemo(() => FRAME_CATEGORY_ORDER.filter((c) => usable.some((f) => f.template.category === c)), [usable]);
   const shown = useMemo(
-    () => frames.filter((f) => (cat === "ALL" || f.template.category === cat) && f.template.name.toLocaleLowerCase("id").includes(q.trim().toLocaleLowerCase("id"))),
-    [frames, cat, q],
+    () => usable.filter((f) => (cat === "ALL" || f.template.category === cat) && f.template.name.toLocaleLowerCase("id").includes(q.trim().toLocaleLowerCase("id"))),
+    [usable, cat, q],
   );
   const previewing = frames.find((f) => f.ref.frameId === (previewId ?? applied));
   const canApply = !!previewing && previewing.ref.frameId !== applied;
@@ -62,9 +97,9 @@ export function FramePanel(props: FramePanelProps) {
         <input type="search" placeholder="Cari frame…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cari frame" />
       </label>
       <div className={styles.chips} role="group" aria-label="Kategori frame">
-        {CATEGORIES.map((c) => (
+        {(["ALL", ...categories] as (FrameCategory | "ALL")[]).map((c) => (
           <ChipButton key={c} selected={cat === c} onClick={() => setCat(c)}>
-            {c === "ALL" ? "Semua" : FRAME_CATEGORY_LABEL[c]}
+            {c === "ALL" ? `Semua (${usable.length})` : FRAME_CATEGORY_LABEL[c]}
           </ChipButton>
         ))}
       </div>
@@ -89,7 +124,9 @@ export function FramePanel(props: FramePanelProps) {
               }}
             >
               <div className={styles.thumbArt}>
-                <StudioCanvas studio={{ ...studio, frame: ref }} template={template} participants={props.participants} meId={props.meId} code={props.code} label={`Contoh ${template.name}`} dateMs={props.dateMs} className={styles.thumbCanvas} />
+                <LazyMount>
+                  <StudioCanvas studio={{ ...studio, frame: ref }} template={template} participants={props.participants} meId={props.meId} code={props.code} label={`Contoh ${template.name}`} dateMs={props.dateMs} className={styles.thumbCanvas} />
+                </LazyMount>
                 {selected && (
                   <span className={styles.check} aria-hidden="true">
                     <Check size={14} {...iconProps} />
@@ -108,7 +145,7 @@ export function FramePanel(props: FramePanelProps) {
             </li>
           );
         })}
-        {shown.length === 0 && <li className={styles.emptyList}>{cat === "CUSTOM" ? "Belum ada frame upload. Coba Upload frame." : "Frame gak ketemu."}</li>}
+        {shown.length === 0 && <li className={styles.emptyList}>{cat === "CUSTOM" ? "Belum ada frame upload. Coba Upload frame." : "Frame tidak ditemukan. Coba kata lain atau pilih kategori Semua."}</li>}
       </ul>
       <footer className={styles.foot}>
         <Button variant="secondary" size="lg" icon={<Upload size={16} {...iconProps} />} onClick={props.onUpload} className={styles.desktopOnly}>

@@ -8,7 +8,7 @@
 .range:focus-visible { box-shadow: none; outline: none; }
 .range::-webkit-slider-runnable-track {
   height: 4px; border-radius: 2px;
-  background: linear-gradient(to right, var(--plum) var(--pct), var(--sunk) var(--pct));
+  background: linear-gradient(to right, var(--sunk) var(--lo, 0%), var(--plum) var(--lo, 0%), var(--plum) var(--hi, var(--pct)), var(--sunk) var(--hi, var(--pct)));
 }
 .range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--sunk); }
 .range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--plum); }
@@ -21,8 +21,10 @@
 .range:focus-visible::-webkit-slider-thumb { box-shadow: var(--focus-ring); }
 .range:focus-visible::-moz-range-thumb { box-shadow: var(--focus-ring); }
 .range:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Layar sentuh: area geser lebih tinggi (thumb tetap 20 px) supaya mudah ditarik tanpa meleset ke gestur lain. */
+@media (pointer: coarse) { .range { height: 36px; touch-action: pan-y; } .range::-webkit-slider-runnable-track { margin: 0; } }
 :global([data-theme="stage"]) .range::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, #fff var(--pct), var(--stage3) var(--pct));
+  background: linear-gradient(to right, var(--stage3) var(--lo, 0%), #fff var(--lo, 0%), #fff var(--hi, var(--pct)), var(--stage3) var(--hi, var(--pct)));
 }
 :global([data-theme="stage"]) .range::-moz-range-track { background: var(--stage3); }
 :global([data-theme="stage"]) .range::-moz-range-progress { background: #fff; }

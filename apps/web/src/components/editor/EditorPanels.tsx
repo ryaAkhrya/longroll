@@ -1,20 +1,26 @@
 "use client";
 
-import { Copy, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import {
   DOODLE_COLORS,
   DOODLE_WIDTHS,
   FILTER_PRESETS,
+  FRAME_CATEGORY_LABEL,
+  FRAME_CATEGORY_ORDER,
   STICKER_CATALOG,
   STICKER_CATEGORY_LABEL,
   TEXT_COLORS,
   TEXT_FONT_LABEL,
   TEXT_FONT_STYLES,
+  ADJUST_CONTROLS,
+  ADJUST_GROUP_LABEL,
+  NEUTRAL_ADJUST,
   elementLabel,
+  isNeutral,
 } from "@longroll/shared";
-import type { CropRect, ElementView, FilterPresetId, HistoryEntry, ParticipantView, StickerAsset } from "@longroll/shared";
+import type { Adjust, AdjustGroup, AdjustKey, CropRect, FrameCategory, ElementView, FilterPresetId, HistoryEntry, ParticipantView, StickerAsset } from "@longroll/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { ChipButton } from "@/components/ui/Chip";
@@ -109,18 +115,74 @@ export function DoodlePanel({ color, width, onColor, onWidth }: { color: string;
   );
 }
 
-export function FilterPanel({ ed, selected }: { ed: EditorController; selected: ElementView | null }) {
+const signed = (v: number) => (v > 0 ? `+${v}` : String(v));
+
+/**
+ * Atur foto (Phase 3): preset filter + penyesuaian non-destruktif (Dasar / Cahaya / Warna / Efek). Cakupan "Semua foto" atau
+ * "Foto ini" (foto terpilih; menggantikan pengaturan semua foto). Slider memberi pratinjau LANGSUNG di kanvas lewat `onDraft`
+ * (belum masuk dokumen), lalu satu perubahan disimpan saat dilepas: satu entri riwayat/Balikin, bukan puluhan.
+ */
+export function AdjustPanel({ ed, selected, onDraft }: { ed: EditorController; selected: ElementView | null; onDraft: (d: { target: string; adjust: Adjust | null } | null) => void }) {
   const photo = selected?.type === "photo" ? selected : null;
-  const current = (photo ? (photo.filter as FilterPresetId | null) : ed.meta?.globalFilter) ?? null;
+  const [scopeWanted, setScope] = useState<"all" | "photo">("all");
+  const scope: "all" | "photo" = photo && scopeWanted === "photo" ? "photo" : "all";
+  const [group, setGroup] = useState<AdjustGroup>("basic");
+  const [draft, setDraft] = useState<Adjust | null>(null);
+  const raf = useRef(0);
+
+  const stored = scope === "photo" ? ((photo?.adjust as Partial<Adjust> | null | undefined) ?? null) : (ed.meta?.globalAdjust ?? null);
+  const values: Adjust = draft ?? { ...NEUTRAL_ADJUST, ...(stored ?? {}) };
+  const target = scope === "photo" && photo ? photo.id : "all";
+  const dirty = !isNeutral(values);
+
+  const pushDraft = (next: Adjust) => {
+    setDraft(next);
+    // Satu pembaruan kanvas per frame, bukan per event input.
+    cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => onDraft({ target, adjust: next }));
+  };
+  const save = (next: Adjust) => {
+    cancelAnimationFrame(raf.current);
+    if (scope === "photo" && photo) ed.setPhotoAdjust(photo.id, isNeutral(next) ? null : next);
+    else ed.setGlobalAdjust(isNeutral(next) ? null : next);
+    setDraft(null);
+    onDraft(null);
+  };
+  const groups = Object.keys(ADJUST_GROUP_LABEL) as AdjustGroup[];
+  // Pola tab ARIA: panah kiri/kanan berpindah tab (roving tabindex), Home/End ke ujung.
+  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = groups.indexOf(group);
+    let n = i;
+    if (e.key === "ArrowRight") n = (i + 1) % groups.length;
+    else if (e.key === "ArrowLeft") n = (i - 1 + groups.length) % groups.length;
+    else if (e.key === "Home") n = 0;
+    else if (e.key === "End") n = groups.length - 1;
+    else return;
+    e.preventDefault();
+    setGroup(groups[n]!);
+    document.getElementById(`adj-tab-${groups[n]}`)?.focus();
+  };
+  const set = (key: AdjustKey, v: number) => pushDraft({ ...values, [key]: v });
+  const commit = (key: AdjustKey, v: number) => save({ ...values, [key]: v });
+
+  const current = (photo && scope === "photo" ? (photo.filter as FilterPresetId | null) : ed.meta?.globalFilter) ?? null;
   const pick = (id: FilterPresetId) => {
     const value = id === "ASLI" ? null : id;
-    if (photo) ed.update(photo.id, { filter: value }, "filter foto");
+    if (photo && scope === "photo") ed.update(photo.id, { filter: value }, "filter foto");
     else ed.setGlobalFilter(value);
   };
+
   return (
     <div className={styles.panel}>
-      <PanelHead title="Filter" />
-      <p className={styles.note}>{photo ? `Filter foto ${String(photo.ownerName)} (mengalahkan filter semua).` : "Filter buat semua foto. Pilih satu foto di kanvas buat filter khusus."}</p>
+      <PanelHead title="Atur foto" />
+      <div className={styles.row} role="radiogroup" aria-label="Berlaku untuk">
+        <button type="button" role="radio" aria-checked={scope === "all"} className={cx(styles.seg, scope === "all" && styles.segOn)} onClick={() => setScope("all")}>
+          Semua foto
+        </button>
+        <button type="button" role="radio" aria-checked={scope === "photo"} disabled={!photo} className={cx(styles.seg, scope === "photo" && styles.segOn)} onClick={() => setScope("photo")} title={photo ? undefined : "Pilih satu foto di kanvas dulu"}>
+          {photo ? `Foto ${String(photo.ownerName)}` : "Foto terpilih"}
+        </button>
+      </div>
       <div className={styles.filters} role="radiogroup" aria-label="Filter">
         {FILTER_PRESETS.map((f) => (
           <button key={f.id} type="button" role="radio" aria-checked={(current ?? "ASLI") === f.id} className={cx(styles.filter, (current ?? "ASLI") === f.id && styles.filterOn)} disabled={ed.readOnly} onClick={() => pick(f.id)}>
@@ -129,19 +191,61 @@ export function FilterPanel({ ed, selected }: { ed: EditorController; selected: 
           </button>
         ))}
       </div>
+      <div className={styles.tabs} role="tablist" aria-label="Kelompok penyesuaian" onKeyDown={onTabKey}>
+        {groups.map((g) => (
+          <button key={g} type="button" role="tab" id={`adj-tab-${g}`} tabIndex={group === g ? 0 : -1} aria-selected={group === g} aria-controls="adj-panel" className={cx(styles.tab, group === g && styles.tabOn)} onClick={() => setGroup(g)}>
+            {ADJUST_GROUP_LABEL[g]}
+            {ADJUST_CONTROLS.some((c) => c.group === g && values[c.key] !== 0) && <span className={styles.tabDot} aria-label="ada perubahan" />}
+          </button>
+        ))}
+      </div>
+      <div id="adj-panel" role="tabpanel" aria-labelledby={`adj-tab-${group}`} className={styles.adjList}>
+        {ADJUST_CONTROLS.filter((c) => c.group === group).map((c) => (
+          <Slider key={c.key} label={c.label} value={values[c.key]} min={c.min} max={c.max} step={c.step} format={c.min < 0 ? signed : undefined} disabled={ed.readOnly} onChange={(v) => set(c.key, v)} onCommit={(v) => commit(c.key, v)} />
+        ))}
+      </div>
+      <div className={styles.row}>
+        <Button variant="secondary" size="sm" disabled={ed.readOnly || (!dirty && !stored)} onClick={() => save(NEUTRAL_ADJUST)}>
+          Reset penyesuaian
+        </Button>
+      </div>
+      <p className={styles.note}>
+        {scope === "photo" ? "Pengaturan foto ini menggantikan pengaturan semua foto." : "Berlaku buat semua foto. Pilih satu foto di kanvas buat mengatur khusus foto itu."} Hasil unduhan sama dengan yang kamu lihat.
+      </p>
     </div>
   );
 }
 
-export function FramePanel({ ed, frames, current }: { ed: EditorController; frames: { id: string; name: string; ref: Parameters<EditorController["setFrame"]>[0] }[]; current: string | null }) {
+export interface FrameChoice {
+  id: string;
+  name: string;
+  category: FrameCategory;
+  /** Warna latar & tinta frame (petunjuk visual cepat di daftar). */
+  palette: { bg: string; ink: string };
+  ref: Parameters<EditorController["setFrame"]>[0];
+}
+
+export function FramePanel({ ed, frames, current }: { ed: EditorController; frames: FrameChoice[]; current: string | null }) {
+  const [cat, setCat] = useState<FrameCategory | "ALL">("ALL");
+  const categories = FRAME_CATEGORY_ORDER.filter((c) => frames.some((f) => f.category === c));
+  const shown = frames.filter((f) => cat === "ALL" || f.category === cat);
   return (
     <div className={styles.panel}>
       <PanelHead title="Frame" />
+      <div className={styles.chips} role="group" aria-label="Kategori frame">
+        {(["ALL", ...categories] as (FrameCategory | "ALL")[]).map((c) => (
+          <ChipButton key={c} selected={cat === c} onClick={() => setCat(c)}>
+            {c === "ALL" ? "Semua" : FRAME_CATEGORY_LABEL[c]}
+          </ChipButton>
+        ))}
+      </div>
       <ul className={styles.frameList} aria-label="Daftar frame">
-        {frames.map((f) => (
+        {shown.map((f) => (
           <li key={f.id}>
             <button type="button" className={cx(styles.frameItem, current === f.id && styles.frameOn)} aria-pressed={current === f.id} disabled={ed.readOnly} onClick={() => ed.setFrame(f.ref, f.name)}>
-              {f.name}
+              <span className={styles.frameSwatch} style={{ background: f.palette.bg, boxShadow: `inset 0 0 0 3px ${f.palette.bg}, inset 0 0 0 5px ${f.palette.ink}` }} aria-hidden="true" />
+              <span className={styles.frameName}>{f.name}</span>
+              {current === f.id && <Check size={15} {...iconProps} aria-hidden="true" />}
             </button>
           </li>
         ))}
